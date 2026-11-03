@@ -1,5 +1,5 @@
 [project]
-name = "05-ann-playground"
+name = "ann-playground"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-05-ann-playground = "05_ann_playground:main"
+05-ann-playground = "ann_playground:main"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]

@@ -1,0 +1,12 @@
+# __pycache__ à la racine ou dans n'importe quel sous-dossier
+**/__pycache__/
+__pycache__/
+
+
+# Fichiers environment
+.env
+.vscode
+
+# Fichiers Data
+/data/
+
