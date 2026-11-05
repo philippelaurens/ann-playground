@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 
 from ann_playground.config import PROCESSED_DATA_DIR
@@ -32,7 +33,31 @@ def load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     return pd.read_parquet(train_file), pd.read_parquet(test_file)
 
 
+def plot_learning_curves(history, model_name="MLP"):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # 1. Courbe de la fonction de perte (Loss)
+    ax1.plot(history.history['loss'], label='Entraînement', linewidth=2)
+    ax1.plot(history.history['val_loss'], label='Validation', linewidth=2, linestyle='--')
+    ax1.set_title(f'Évolution de la Perte ({model_name})')
+    ax1.set_xlabel('Epochs')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True)
+    
+    # 2. Courbe de la précision (Accuracy)
+    ax2.plot(history.history['accuracy'], label='Entraînement', linewidth=2)
+    ax2.plot(history.history['val_accuracy'], label='Validation', linewidth=2, linestyle='--')
+    ax2.set_title(f'Évolution de la Précision ({model_name})')
+    ax2.set_xlabel('Epochs')
+    ax2.set_ylabel('Accuracy')
+    ax2.legend()
+    ax2.grid(True)
+    
+    plt.tight_layout()
 
+    st.pyplot(fig)
+    plt.close(fig)
 
 # ==============================================================================
 # UI Setup and Sidebar
@@ -130,6 +155,8 @@ with tab_train:
     progress_bar = st.empty()
     chart_spot = st.empty()
 
+    history = None
+
     if launch_btn:
         if engine == "Keras (TensorFlow)":
             model = build_keras_mlp(
@@ -187,16 +214,14 @@ with tab_train:
                 "test_accuracy": float(test_acc),
             }
 
-            """
-            log_keras_training(
-                run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
-                params=run_params,
-                model=model,
-                history=history.history,
-                metrics_test=metrics_summary,
-                fig_cm=fig_cm,
-            )
-            """
+            # log_keras_training(
+            #    run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
+            #    params=run_params,
+            #    model=model,
+            #    history=history.history,
+            #    metrics_test=metrics_summary,
+            #    fig_cm=fig_cm,
+            #)
 
             st.session_state["trained_model"] = model
             st.session_state["history_df"] = pd.DataFrame(history.history)
@@ -400,6 +425,18 @@ with tab_eval:
             )
             fig_cm.update_layout(height=380, margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_cm, use_container_width=True)
+
+    if history is not None:
+        st.subheader("Courbes d'apprentissage")
+
+        # On crée 3 colonnes : [Marge gauche, Contenu central (80%), Marge droite]
+        # Les proportions [0.1, 0.8, 0.1] laissent 10% de vide à gauche et à droite.
+        col_center, _ = st.columns([0.9, 0.1])
+
+        with col_center:
+            plot_learning_curves(history, "kk")
+
+
 
 # ------------------------------------------------------------------------------
 # 3 · Diagnostic
