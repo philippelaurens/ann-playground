@@ -1,0 +1,31 @@
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Git & Docker
+.git/
+.gitignore
+.dockerignore
+
+# Fichiers temporaires & OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+~$*
+temp/
+
+# Données & MLflow (Artefacts volumineux)
+data/
+mlruns/
+mlflow.db
+mlartifacts/
+
+# Projets / Notebooks / Tests hors production
+notebooks/
+tests/.pytest_cache/
+presentation/

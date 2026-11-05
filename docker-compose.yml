@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ann_playground_app
+    ports:
+      - "8501:8501"
+      - "5000:5000"
+    volumes:
+      # Monte le code source pour le rechargement à chaud
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./data:/app/data
+      # Isole le venv pour que le dossier .venv du conteneur (généré lors du build) ne soit pas écrasé par l'hôte
+      - /app/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    restart: unless-stopped

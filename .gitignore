@@ -1,12 +1,49 @@
-# __pycache__ à la racine ou dans n'importe quel sous-dossier
-**/__pycache__/
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Securite
+.env
+
+# Caches Python
+*.pyc
 __pycache__/
 
+# Donnees locales
+data/
+temp/
+tutorials/
 
-# Fichiers environment
-.env
-.vscode
+# Fichiers IA (instructions locales, non versionnees en entreprise)
+CLAUDE.md
+.github/copilot-instructions.md
 
-# Fichiers Data
-/data/
+presentation/
 
+# MLFlow
+mlflow.db
+mlartifacts/
+
+
+.venv/
+
+.pytest_cache/
+
+.coverage
+
+htmlcov/
+
+.mypy_cache/
+
+.ruff_cache/
+
+__pycache__/
+
+*.pyc
