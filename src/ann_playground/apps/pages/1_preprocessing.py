@@ -227,7 +227,8 @@ with tab_filter:
         step=0.01,
     )
 
-    numeric_df = df_raw.select_dtypes(include=[np.number])
+    # numeric_df = df_raw.select_dtypes(include=[np.number])
+    numeric_df = df_raw[typed_features['continuous']]
     pairs = correlated_features(numeric_df, threshold=corr_threshold)
 
     col_corr1, col_corr2 = st.columns([1, 1])
@@ -282,13 +283,55 @@ with tab_filter:
         corr_matrix = numeric_df.corr().round(2)
         fig_heat = px.imshow(
             corr_matrix,
-            text_auto=False,
-            aspect="auto",
+            text_auto='.2f',
+            aspect="equal",
             color_continuous_scale="RdBu_r",
             zmin=-1.0,
             zmax=1.0,
         )
+        fig_heat.update_layout(
+            width=1000,
+            height=1000,
+            xaxis_title="",
+            yaxis_title=""
+        )
+
         st.plotly_chart(fig_heat, use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("📊 Interprétation de la matrice de corrélation")
+
+        st.markdown("""
+        Cette matrice de corrélation apporte des enseignements très clairs :
+        """)
+
+        # Utilisation d'onglets ou de blocs visuels pour structurer l'analyse
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("""
+            ### 1. Le bloc académique (Crédits & Unités)
+            * **Forte redondance :** Corrélations intenses au centre (souvent $> 0.75$, voire $0.94$ entre S1 et S2 pour les crédits). Un étudiant qui s'inscrit et valide ses unités au premier semestre fait de même au second.
+            * **Impact sur l'ACP :** La première composante principale ($PC_1$) va massivement capturer cette dimension de **volume et de progression académique**.
+            
+            ### 2. Le bloc des notes (`Grade`)
+            * **Lien modéré :** Corrélation autour de $0.58$ pour l'admission/qualification et $0.68$ pour les notes semestrielles.
+            * **Impact sur l'ACP :** Ces variables de performance pure formeront un axe de **"niveau académique"** ou de compétence intrinsèque.
+            """)
+
+        with col2:
+            st.markdown("""
+            ### 3. Indicateurs macroéconomiques
+            * **Indépendance totale :** Valeurs proches de $0$ face aux variables académiques (max $-0.34$ entre chômage et PIB).
+            * **Impact sur l'ACP :** Information totalement orthogonale. Ces variables exogènes structureront des composantes spécifiques (probablement $PC_3$ ou $PC_4$).
+            """)
+
+        # Encadré synthétique pour la conclusion sur le Réseau de Neurones
+        st.info("""
+        💡 **Faut-il supprimer des variables à cause de la multicolinéarité ?**  
+        **Non.** Les réseaux de neurones (MLP) tolèrent très bien la redondance. Si deux variables sont fortement corrélées (ex: crédits S1 et S2), le réseau va simplement répartir les poids synaptiques de manière similaire sans "casser" l'optimisation par descente de gradient. De plus, l'ACP se chargera d'orthogonaliser l'espace.
+        """)        
+
 
 
 # ------------------------------------------------------------------------------

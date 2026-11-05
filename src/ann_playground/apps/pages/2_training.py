@@ -20,7 +20,7 @@ st.set_page_config(
 
 experiment_id = "0"
 
-@st.cache_data
+# @st.cache_data
 def load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     train_file = PROCESSED_DATA_DIR / "train_prepared.parquet"
@@ -426,11 +426,43 @@ with tab_diagnose:
 
         st.markdown("#### Diagnostic automatique")
         if gap_acc > 0.12 or (final_val_loss > hist["val_loss"].min() * 1.25):
-            st.error(
-                "Surapprentissage (Overfitting) détecté : La perte de validation remonte ou l'écart "
-                "d'exactitude entre le train et le test dépasse 12 %. Préconisations : augmenter le Dropout, "
-                "ajouter de la régularisation L2, ou réduire le nombre de neurones/couches."
-            )
+            # st.error(
+            #     "Surapprentissage (Overfitting) détecté : La perte de validation remonte ou l'écart "
+            #     "d'exactitude entre le train et le test dépasse 12 %. Préconisations : augmenter le Dropout, "
+            #    "ajouter de la régularisation L2, ou réduire le nombre de neurones/couches."
+            # )
+
+            # Mettre en valeur le constat du sur-apprentissage
+            st.warning("""
+            ⚠️ **Constat d'Overfitting :**  
+            Le réseau de neurones a commencé à apprendre par cœur les particularités et le bruit du jeu d'entraînement, au détriment de sa capacité de généralisation sur des données qu'il n'a jamais vues (la validation).
+            """)
+
+            st.markdown("### 🛠️ Leviers pour corriger le sur-apprentissage dans Keras (MLP)")
+            st.markdown("""
+            Pour remédier à ce sur-apprentissage, plusieurs leviers permettent de corriger rapidement ce type d'écart dans un modèle Keras (MLP) :
+            """)
+
+            # Affichage des 4 leviers sous forme de colonnes ou de blocs Markdown
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("""
+                #### 1. Ajouter du Dropout dans l'architecture
+                Insérer des couches de `Dropout` (par exemple `layers.Dropout(0.3)` ou `0.5`) entre les couches denses permet de désactiver aléatoirement un pourcentage de neurones à chaque étape d'entraînement, forçant le réseau à trouver des motifs plus robustes.
+
+                #### 2. Mettre en place un Early Stopping
+                Si on lance l'entraînement avec un nombre d'époques très élevé, il est très probable que le modèle continue d'apprendre sur le train alors que les performances sur la validation stagnent ou se dégradent. L'arrêt précoce stoppe l'entraînement dès que la `val_loss` cesse de s'améliorer.
+                """)
+
+            with col2:
+                st.markdown("""
+                #### 3. Utiliser une régularisation des poids (L2)
+                Ajouter une pénalité L2 (`kernel_regularizer=tf.keras.regularizers.l2(0.001)`) sur les couches denses permet d'éviter que les poids synaptiques ne s'envolent vers des valeurs trop élevées.
+
+                #### 4. Alléger l'architecture du réseau
+                Si le réseau comporte trop de couches ou trop de neurones par rapport à la taille du dataset, le réduire un peu l'empêchera de mémoriser les données par cœur.
+                """)
         elif final_train_acc < 0.65:
             st.warning(
                 "Sous-apprentissage (Underfitting) probable : La capacité du modèle est insuffisante "
