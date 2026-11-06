@@ -17,7 +17,7 @@ wheels/
 __pycache__/
 
 # Donnees locales
-data/
+/data/
 temp/
 tutorials/
 
