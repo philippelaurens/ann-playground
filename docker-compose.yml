@@ -33,6 +33,8 @@ services:
       --serve-artifacts
       --host 0.0.0.0
       --port 5000
+      --cors-allowed-origins "*"
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       # Dossier (et non fichier) pour éviter que Docker crée un répertoire mlflow.db
       - ./mlflow-data:/app/mlflow-data

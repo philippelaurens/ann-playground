@@ -16,3 +16,12 @@ CLEAN_DATA_DIR: Final[Path] = DATA_DIR / "clean_data"
 PROCESSED_DATA_DIR: Final[Path] = DATA_DIR / "processed_data"
 
 DATA: Final[Path] = RAW_DATA_DIR / "data.csv"
+
+MLFLOW_DATA_DIR: Final[Path] = BASE_DIR / "mlflow-data"
+MLFLOW_DB_PATH: Final[Path] = MLFLOW_DATA_DIR / "mlflow.db"
+MLFLOW_TRACKING_URI: Final[str] = os.getenv(
+    "MLFLOW_TRACKING_URI",
+    # f"sqlite:///{MLFLOW_DB_PATH.resolve()}",
+    "http://mlflow:5000",
+)
+EXPERIMENT_NAME: str = "ANN_Playground"

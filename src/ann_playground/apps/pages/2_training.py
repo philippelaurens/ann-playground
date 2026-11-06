@@ -8,7 +8,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 
-from ann_playground.config import PROCESSED_DATA_DIR
+from ann_playground.config import PROCESSED_DATA_DIR, EXPERIMENT_NAME
 from ann_playground.model.keras_mlp import StreamlitEpochCallback, build_keras_mlp
 from ann_playground.model.numpy_mlp import NumpyMLP
 
@@ -20,6 +20,12 @@ from ann_playground.data.data_visualisation import (
     plot_learning_curves,
 )
 
+from ann_playground.utils.tracking_utils import (
+    init_mlflow_experiment,
+    log_keras_training,
+    log_numpy_training,
+)
+
 st.set_page_config(
     page_title="ANN Playground · ANN Lab",
     page_icon="🔬",
@@ -27,12 +33,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-experiment_id = "0"
-
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
-    
+
+
+# ==============================================================================
+# Start MLFlow
+# ==============================================================================
+
+try:
+    experiment_id = init_mlflow_experiment(EXPERIMENT_NAME)
+except Exception as err:
+    st.warning(f"MLflow service connection unavailable: {err}. Runs will attempt reconnect on launch.")
+    experiment_id = "0"
 
 # ==============================================================================
 # UI Setup and Sidebar
@@ -191,17 +205,18 @@ with tab_train:
                 "test_accuracy": float(test_acc),
             }
 
-            # log_keras_training(
-            #    run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
-            #    params=run_params,
-            #    model=model,
-            #    history=history.history,
-            #    metrics_test=metrics_summary,
-            #    fig_cm=fig_cm,
-            #)
+            log_keras_training(
+               run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
+               params=run_params,
+               model=model,
+               history=history.history,
+               metrics_test=metrics_summary,
+               fig_cm=fig_cm,
+            )
 
             st.session_state["trained_model"] = model
             st.session_state["history_df"] = pd.DataFrame(history.history)
+            st.session_state["history_obj"] = pd.DataFrame(history.history)
             st.session_state["y_pred"] = y_pred
             st.session_state["engine"] = "keras"
             st.success("Entraînement Keras terminé et enregistré dans MLflow.")
@@ -314,13 +329,13 @@ with tab_train:
                 "test_accuracy": float(test_acc),
             }
 
-#           log_numpy_training(
-#               run_name=f"numpy_mlp_{activation_fn}_lr{learning_rate}",
-#               params=run_params,
-#               history=records,
-#               metrics_test=metrics_summary,
-#               fig_cm=fig_cm,
-#           )
+            log_numpy_training(
+                run_name=f"numpy_mlp_{activation_fn}_lr{learning_rate}",
+                params=run_params,
+                history=records,
+                metrics_test=metrics_summary,
+                fig_cm=fig_cm,
+            )
 
             st.session_state["trained_model"] = np_model
             st.session_state["history_df"] = pd.DataFrame(records)
@@ -403,15 +418,13 @@ with tab_eval:
             fig_cm.update_layout(height=380, margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_cm, use_container_width=True)
 
-    if history is not None:
+    if "history_obj" in st.session_state and not st.session_state["history_obj"].empty:
         st.subheader("Courbes d'apprentissage")
 
-        # On crée 3 colonnes : [Marge gauche, Contenu central (80%), Marge droite]
-        # Les proportions [0.1, 0.8, 0.1] laissent 10% de vide à gauche et à droite.
+        df = st.session_state["history_obj"]
         col_center, _ = st.columns([0.9, 0.1])
-
         with col_center:
-            fig = plot_learning_curves(history, "Learning Curve")
+            fig = plot_learning_curves(df, "Learning Curve")
             st.pyplot(fig)
 
 
