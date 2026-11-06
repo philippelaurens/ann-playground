@@ -1,17 +1,22 @@
 from pathlib import Path
-from typing import Any
-
+from typing import Any, Dict, List, Tuple
+import time
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
 import streamlit as st
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.decomposition import PCA
 
 from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR
+
 from ann_playground.data.data_utils import (
     load_source_data,
     export_train_test_parquet,
+    load_prepared_datasets,
+    export_pca_parquet,
 )
 from ann_playground.utils.preprocessing_utils import (
     count_duplicates,
@@ -23,11 +28,22 @@ from ann_playground.utils.preprocessing_utils import (
     target_correlations,
     preprocess_data,
 )
+from ann_playground.data.data_visualisation import (
+    plot_pca_cumulative_variance,
+    scree_plot_with_ideal_components,
+)
+
 
 @st.cache_data
 def cached_load_source_data(file_path: Path | Any) -> pd.DataFrame:
     """Fonction wrapper mise en cache pour Streamlit qui appelle la logique de chargement."""
     return load_source_data(file_path)
+
+# @st.cache_data
+def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Load train and test Parquet matrices from processed data directory."""
+    return load_prepared_datasets()
+
 
 # ==============================================================================
 # Barre latérale : Source de données & Target
@@ -97,14 +113,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-tab_audit, tab_eda, tab_filter, tab_prep = st.tabs(
+tab_audit, tab_eda, tab_filter, tab_prep, tab_pca= st.tabs(
     [
         "1 · Diagnostic structurel",
         "2 · Distributions & Relations",
         "3 · Colinéarité & Sélection",
         "4 · Partition & Transformation",
+        "5 · Analyse en Composantes Principales (PCA)",
     ]
 )
+
+if "export_ready" not in st.session_state:
+    st.session_state["export_ready"] = False
 
 # ------------------------------------------------------------------------------
 # 1 · Diagnostic structurel
@@ -333,7 +353,6 @@ with tab_filter:
         """)        
 
 
-
 # ------------------------------------------------------------------------------
 # 4 · Partition & Transformation
 # ------------------------------------------------------------------------------
@@ -421,16 +440,15 @@ with tab_prep:
             y_train=y_train,
             y_test=y_test,
             output_dir=PROCESSED_DATA_DIR,
-            target_name="target",
+            target_name=target_name,
         )
 
         df_train_ready = df_train_features.copy()
-        df_train_ready["target"] = y_train
+        df_train_ready[target_name] = y_train
 
         df_test_ready = df_test_features.copy()
-        df_test_ready["target"] = y_test
+        df_test_ready[target_name] = y_test
 
-        st.session_state["export_ready"] = True
         st.success(
             f"Matrices exportées avec succès dans `{PROCESSED_DATA_DIR}`\n\n"
             f"- Train set : `{df_train_features.shape[0]}` lignes, `{len(encoded_cols)}` features\n"
@@ -438,3 +456,142 @@ with tab_prep:
             f"- Classes cibles : {dict(enumerate(label_enc.classes_))}"
         )
         st.dataframe(df_train_features.head(5), use_container_width=True)
+
+        st.session_state["export_ready"] = True
+        st.session_state["button_ready"] = True
+
+
+
+# ------------------------------------------------------------------------------
+# 5 · Analyse en Composantes Principales (PCA)
+# ------------------------------------------------------------------------------
+
+with tab_pca:
+
+    if st.session_state.get("export_ready", False) == False:
+        
+        st.subheader("L’Analyse en Composantes Principales (PCA)")
+
+        st.markdown(
+            """
+            L’Analyse en Composantes Principales est une méthode statistique de réduction de dimension, utilisée pour explorer et simplifier des
+            jeux de données comportant de nombreuses variables corrélées entre elles.
+            
+            Son principe : projeter les données dans un nouvel espace dont les axes, appelés composantes principales, sont des combinaisons linéaires des 
+            variables d’origine. Ces axes sont orthogonaux entre eux et ordonnés selon la part de variance qu’ils expliquent. 
+            La première composante capte le maximum d’information, la deuxième le maximum de ce qui reste, 
+            et ainsi de suite. En ne conservant que les premières composantes, on réduit considérablement la dimension des données en perdant un minimum d’information.
+            """
+        )
+
+        st.markdown("#### Les 3 piliers méthodologiques :")
+
+        st.markdown(
+            """
+            1. **Découpage train/test en amont** : Il faut séparer les données *avant* toute transformation, ce qui évite que des informations du jeu de test ne fuitent dans l'entraînement.
+            2. **Fit du `ColumnTransformer` uniquement sur `X_train`** : *(Via `fit_transform` sur le train, puis `transform` seul sur le test).* Les moyennes, les encodages et les imputations sont calculés uniquement sur le train et appliqués sagement au test.
+            3. **PCA appliquée après le preprocessing** : La PCA prend en entrée `X_train_prep` (qui est déjà proprement encodé et normalisé). C'est ce qu'il faut faire, car une PCA a besoin de variables numériques continues et centrées-réduites pour fonctionner correctement.
+            """
+        )
+
+        st.info(
+            "💡 **Bénéfice direct :** Les matrices réduites sont parfaitement orthogonales, "
+            "stabilisent l'apprentissage du MLP et réduisent la complexité dimensionnelle sans compromettre l'intégrité des données."
+        )
+
+        st.markdown("#### A faire :")     
+
+        st.markdown(
+            """
+            1. Sélectionner l'onglet **Partition & Transformation**.
+            2. Cliquer sur le bonton **Générer les matrices Train/Test**
+            3. Sélectionner l'obket **Analyse en Composantes Principales (PCA)**
+            """
+        )        
+    
+    else:
+
+        X_train, X_test = cached_load_prepared_datasets()
+
+        X_train_prep = X_train.drop(columns=[target_name]).values.astype(np.float32)
+        y_train = X_train[target_name].values.astype(np.int64)
+
+        X_test_prep = X_test.drop(columns=[target_name]).values.astype(np.float32)
+        y_test = X_test[target_name].values.astype(np.int64)
+
+
+        st.subheader("Analyse en Composantes Principales (PCA)")
+        st.write(
+            f"Dimensions actuelles : `{X_train_prep.shape[0]}` lignes, `{X_train_prep.shape[1]}` colonnes."
+        )
+
+        fig_pca, n_comp = plot_pca_cumulative_variance(X_train_prep, threshold=0.95)
+        fig_scree, n_var, n_kaiser = scree_plot_with_ideal_components(X_train_prep, variance_threshold=0.95)
+
+        c_left, c_right = st.columns(2, vertical_alignment="center")
+
+        with c_left:
+            st.markdown("##### La méthode des éboulis")
+            st.pyplot(fig_scree)
+            plt.close(fig_scree)
+        with c_right:
+            st.metric(label="Recommandation (95% de variance)", value=f"{n_var} composantes")
+            st.caption(
+                "**Recommandation (95 % de variance)** : nombre minimal de composantes principales "
+                "à conserver pour que la variance cumulée expliquée atteigne 95 %. "
+                "C'est le critère le plus utilisé quand on veut préserver l'essentiel de l'information "
+                "du jeu de données."
+            )
+            st.metric(label="Critère de Kaiser (Valeur propre > 1)", value=f"{n_kaiser} composantes")
+            st.caption(
+                "**Critère de Kaiser** : on ne retient que les composantes dont la valeur propre est "
+                "supérieure à 1, c'est-à-dire celles qui expliquent plus de variance qu'une variable "
+                "d'origine standardisée prise isolément. Il est valable sur des données centrées-réduites "
+                "et tend à être plus sévère (moins de composantes) que le seuil de 95 %."
+            )
+            
+        n_components_choisi = st.slider(
+            label="Nombre de composantes principales à conserver",
+            min_value=1,
+            max_value=int(X_train_prep.shape[1]),
+            value=int(n_var),
+            step=1,
+            key="slider_pca_components",
+            help="Glisse pour ajuster la dimensionnalité de l'espace d'entrée du modèle."
+        )
+
+        button_container = st.container()
+        with button_container:
+            # La condition normale : désactivé si export_ready est déjà True
+            is_ready = st.session_state.get("button_ready", True) == False
+
+            if st.button(
+                "Générer les matrices Train / Test (PCA)", 
+                type="primary",
+                disabled=is_ready
+            ):
+                
+                pca_personnalise = PCA(n_components=n_components_choisi, random_state=42)
+                X_train_pca = pca_personnalise.fit_transform(X_train_prep)
+                X_test_pca = pca_personnalise.transform(X_test_prep)
+
+                train_file, test_file = export_pca_parquet(
+                    X_train_pca=X_train_pca,
+                    X_test_pca=X_test_pca,
+                    y_train=y_train,
+                    y_test=y_test,
+                    output_dir=PROCESSED_DATA_DIR,
+                    target_name=target_name
+                )
+
+                st.success(
+                    f"✅ Matrices PCA exportées avec succès dans `{PROCESSED_DATA_DIR}`\n\n"
+                    f"- **Train set (PCA)** : `{X_train_pca.shape[0]}` lignes, `{X_train_pca.shape[1]}` composantes principales\n"
+                    f"- **Test set (PCA)** : `{X_test_pca.shape[0]}` lignes, `{X_test_pca.shape[1]}` composantes principales\n"
+                    f"- **Cible (`{target_name}`)** : {len(np.unique(y_train))} classes uniques"
+                )  
+
+                st.session_state["button_ready"] = False
+
+                time.sleep(5)
+                st.rerun()

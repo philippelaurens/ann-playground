@@ -12,58 +12,28 @@ from ann_playground.config import PROCESSED_DATA_DIR
 from ann_playground.model.keras_mlp import StreamlitEpochCallback, build_keras_mlp
 from ann_playground.model.numpy_mlp import NumpyMLP
 
-st.set_page_config(
-    page_title="ANN Lab · Multi-Layer Perceptron",
-    page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded",
+from ann_playground.data.data_utils import (
+    load_prepared_datasets,
 )
+
+from ann_playground.data.data_visualisation import (
+    plot_learning_curves,
+)
+
 
 experiment_id = "0"
 
 # @st.cache_data
-def load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
+def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
-    train_file = PROCESSED_DATA_DIR / "train_prepared.parquet"
-    test_file = PROCESSED_DATA_DIR / "test_prepared.parquet"
-
-    if not train_file.exists() or not test_file.exists():
-        return None, None
-
-    return pd.read_parquet(train_file), pd.read_parquet(test_file)
-
-
-def plot_learning_curves(history, model_name="MLP"):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    return load_prepared_datasets()
     
-    # 1. Courbe de la fonction de perte (Loss)
-    ax1.plot(history.history['loss'], label='Entraînement', linewidth=2)
-    ax1.plot(history.history['val_loss'], label='Validation', linewidth=2, linestyle='--')
-    ax1.set_title(f'Évolution de la Perte ({model_name})')
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss')
-    ax1.legend()
-    ax1.grid(True)
-    
-    # 2. Courbe de la précision (Accuracy)
-    ax2.plot(history.history['accuracy'], label='Entraînement', linewidth=2)
-    ax2.plot(history.history['val_accuracy'], label='Validation', linewidth=2, linestyle='--')
-    ax2.set_title(f'Évolution de la Précision ({model_name})')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('Accuracy')
-    ax2.legend()
-    ax2.grid(True)
-    
-    plt.tight_layout()
-
-    st.pyplot(fig)
-    plt.close(fig)
 
 # ==============================================================================
 # UI Setup and Sidebar
 # ==============================================================================
 
-df_train, df_test = load_prepared_datasets()
+df_train, df_test = cached_load_prepared_datasets()
 
 with st.sidebar:
     st.title("ANN Lab")
@@ -120,11 +90,11 @@ if df_train is None or df_test is None:
     st.info("Exécutez `1_data_studio.py` pour partitionner et prétraiter les données.")
     st.stop()
 
-X_train = df_train.drop(columns=["target"]).values.astype(np.float32)
-y_train = df_train["target"].values.astype(np.int64)
+X_train = df_train.drop(columns=["Target"]).values.astype(np.float32)
+y_train = df_train["Target"].values.astype(np.int64)
 
-X_test = df_test.drop(columns=["target"]).values.astype(np.float32)
-y_test = df_test["target"].values.astype(np.int64)
+X_test = df_test.drop(columns=["Target"]).values.astype(np.float32)
+y_test = df_test["Target"].values.astype(np.int64)
 
 n_features = X_train.shape[1]
 n_classes = len(np.unique(y_train))
@@ -434,8 +404,8 @@ with tab_eval:
         col_center, _ = st.columns([0.9, 0.1])
 
         with col_center:
-            plot_learning_curves(history, "kk")
-
+            fig = plot_learning_curves(history, "Learning Curve")
+            st.pyplot(fig)
 
 
 # ------------------------------------------------------------------------------

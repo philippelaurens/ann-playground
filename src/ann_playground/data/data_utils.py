@@ -1,12 +1,14 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from typing import Any
+from typing import Any, Dict, List, Tuple
 from ucimlrepo import fetch_ucirepo
 
 from pathlib import Path
 import numpy as np
 import pandas as pd
+
+from ann_playground.config import PROCESSED_DATA_DIR
 
 
 def fetch_and_save_dataset(
@@ -70,6 +72,17 @@ def load_source_data(file_path: Path | Any) -> pd.DataFrame:
     return df
 
 
+def load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Load train and test Parquet matrices from processed data directory."""
+    train_file = PROCESSED_DATA_DIR / "train_prepared.parquet"
+    test_file = PROCESSED_DATA_DIR / "test_prepared.parquet"
+
+    if not train_file.exists() or not test_file.exists():
+        return None, None
+
+    return pd.read_parquet(train_file), pd.read_parquet(test_file)
+
+
 def export_train_test_parquet(
     X_train: pd.DataFrame,
     X_test: pd.DataFrame,
@@ -130,5 +143,64 @@ def export_train_test_parquet(
     # Export au format Parquet
     X_tr.to_parquet(train_path, index=False)
     X_te.to_parquet(test_path, index=False)
+
+    return train_path, test_path
+
+
+def export_pca_parquet(
+    X_train_pca: np.ndarray,
+    X_test_pca: np.ndarray,
+    y_train: pd.Series | np.ndarray,
+    y_test: pd.Series | np.ndarray,
+    output_dir: Path | str = "data/processed_data",
+    target_name: str = "Target",
+) -> tuple[Path, Path]:
+    """
+        Exporte les matrices transformées par ACP (PCA) ainsi que leurs variables 
+        cibles associées vers des fichiers au format Parquet.
+
+        Cette fonction convertit les tableaux NumPy issus de la PCA en DataFrames 
+        pandas nommés dynamiquement (PC_1, PC_2, etc.), y joint les étiquettes cibles, 
+        crée le répertoire de destination si nécessaire et sauvegarde le tout.
+
+        Parameters
+        ----------
+        X_train_pca : np.ndarray
+            Tableau NumPy contenant les données d'entraînement réduites par PCA.
+        X_test_pca : np.ndarray
+            Tableau NumPy contenant les données de test réduites par PCA.
+        y_train : pd.Series or np.ndarray
+            Vecteur ou série de la variable cible pour l'entraînement.
+        y_test : pd.Series or np.ndarray
+            Vecteur ou série de la variable cible pour le test.
+        output_dir : Path or str, default="data/processed_data"
+            Chemin du répertoire de sortie où enregistrer les fichiers Parquet.
+        target_name : str, default="target"
+            Nom de la colonne attribuée à la variable cible dans les fichiers finaux.
+
+        Returns
+        -------
+        tuple[Path, Path]
+            Un tuple contenant le chemin absolu ou relatif vers le fichier Parquet 
+            d'entraînement (`train_path`) et vers le fichier Parquet de test (`test_path`).
+    """
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    train_path = out_path / "train_prepared.parquet"
+    test_path = out_path / "test_prepared.parquet"   
+
+    # Conversion des tableaux NumPy PCA en DataFrames pandas avec des noms de colonnes explicites
+    cols = [f"PC_{i+1}" for i in range(X_train_pca.shape[1])]
+    
+    df_train_pca = pd.DataFrame(X_train_pca, columns=cols)
+    df_test_pca = pd.DataFrame(X_test_pca, columns=cols)
+
+    # 2. Ajout de la variable cible
+    df_train_pca[target_name] = y_train.values if hasattr(y_train, "values") else y_train
+    df_test_pca[target_name] = y_test.values if hasattr(y_test, "values") else y_test
+
+    # 3. Export au format Parquet
+    df_train_pca.to_parquet(train_path, index=False)
+    df_test_pca.to_parquet(test_path, index=False)
 
     return train_path, test_path
