@@ -33,13 +33,18 @@ from ann_playground.data.data_visualisation import (
     scree_plot_with_ideal_components,
 )
 
+st.set_page_config(
+    page_title="ANN Playground · Data Studio",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-@st.cache_data
+
 def cached_load_source_data(file_path: Path | Any) -> pd.DataFrame:
     """Fonction wrapper mise en cache pour Streamlit qui appelle la logique de chargement."""
     return load_source_data(file_path)
 
-# @st.cache_data
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
@@ -49,44 +54,38 @@ def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame |
 # Barre latérale : Source de données & Target
 # ==============================================================================
 
+st.title("ANN Playground : Data Studio")
+
 with st.sidebar:
-    st.title("Data Studio")
-    st.caption("Module générique de préparation et diagnostic")
+    with st.empty().container():
+        st.caption("Module générique de préparation et diagnostic")
 
-    data_source_mode = st.radio(
-        "Source de données",
-       # ["Fichier du projet (config)", "Téléverser un fichier local"],
-       ["Fichier du projet (config)"],
-    )
+        data_source_mode = st.radio(
+            "Source de données",
+        # ["Fichier du projet (config)", "Téléverser un fichier local"],
+        ["Fichier du projet (config)"],
+        )
 
-    if data_source_mode == "Fichier du projet (config)":
-        if DATA.exists():
-            df_raw = cached_load_source_data(DATA)
-            st.success(f"Fichier chargé : `{DATA.name}`")
+        if data_source_mode == "Fichier du projet (config)":
+            if DATA.exists():
+                df_raw = cached_load_source_data(DATA)
+                st.success(f"Fichier chargé : `{DATA.name}`")
         else:
-            st.error(f"Fichier introuvable à l'emplacement : {DATA}")
-            st.stop()
-    else:
-        uploaded = st.file_uploader("Fichier tabulaire", type=["csv", "parquet"])
-        if uploaded is not None:
-            df_raw = cached_load_source_data(uploaded)
-            st.success(f"Fichier chargé : `{uploaded.name}`")
-        else:
-            st.info("Importez un fichier pour initialiser l'espace de travail.")
-            st.stop()
+            uploaded = st.file_uploader("Fichier tabulaire", type=["csv", "parquet"])
+            if uploaded is not None:
+                df_raw = cached_load_source_data(uploaded)
+                st.success(f"Fichier chargé : `{uploaded.name}`")
 
-    column_candidates = ["Aucune"] + list(df_raw.columns)
-    selected_target = st.selectbox(
-        "Variable cible (Target)", column_candidates, index=len(column_candidates) - 1
-    )
-    target_name = None if selected_target == "Aucune" else selected_target
+        column_candidates = ["Aucune"] + list(df_raw.columns)
+        selected_target = st.selectbox(
+            "Variable cible (Target)", column_candidates, index=len(column_candidates) - 1
+        )
+        target_name = None if selected_target == "Aucune" else selected_target
 
 
 # ==============================================================================
 # Structure principale en onglets
 # ==============================================================================
-
-st.set_page_config(layout="wide")
 
 # Injection CSS ciblant les data-testid stables de Streamlit
 st.markdown("""

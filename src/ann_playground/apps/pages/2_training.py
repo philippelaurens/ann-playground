@@ -20,10 +20,15 @@ from ann_playground.data.data_visualisation import (
     plot_learning_curves,
 )
 
+st.set_page_config(
+    page_title="ANN Playground · ANN Lab",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 experiment_id = "0"
 
-# @st.cache_data
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
@@ -35,48 +40,50 @@ def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame |
 
 df_train, df_test = cached_load_prepared_datasets()
 
+st.title("ANN Playground : ANN Lab")
+
 with st.sidebar:
-    st.title("ANN Lab")
-    st.caption("Conception et évaluation de topologies MLP")
+    with st.empty().container():    
+        st.caption("Conception et évaluation de topologies MLP")
 
-    engine = st.selectbox("Moteur de calcul", ["Keras (TensorFlow)", "NumPy MLP (POO)"])
+        engine = st.selectbox("Moteur de calcul", ["Keras (TensorFlow)", "NumPy MLP (POO)"])
 
-    st.divider()
-    st.markdown("#### Hyperparamètres d'architecture")
+        st.divider()
+        st.markdown("#### Hyperparamètres d'architecture")
 
-    n_layers = st.slider("Nombre de couches cachées", 1, 4, 2)
-    hidden_units: List[int] = []
-    cols = st.columns(n_layers)
-    for i in range(n_layers):
-        default_val = 64 // (2**i) if 64 // (2**i) >= 8 else 8
-        units = cols[i].number_input(
-            f"L{i + 1}", min_value=4, max_value=256, value=default_val, step=4
-        )
-        hidden_units.append(int(units))
+        n_layers = st.slider("Nombre de couches cachées", 1, 4, 2)
+        hidden_units: List[int] = []
+        cols = st.columns(n_layers)
+        for i in range(n_layers):
+            default_val = 64 // (2**i) if 64 // (2**i) >= 8 else 8
+            units = cols[i].number_input(
+                f"L{i + 1}", min_value=4, max_value=256, value=default_val, step=4
+            )
+            hidden_units.append(int(units))
 
-    activation_fn = st.selectbox("Fonction d'activation", ["relu", "tanh", "sigmoid"])
-    learning_rate = st.select_slider(
-        "Taux d'apprentissage (lr)",
-        options=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
-        value=0.001,
-    )
-
-    if engine == "Keras (TensorFlow)":
-        dropout = st.slider("Taux de Dropout", 0.0, 0.5, 0.2, 0.05)
-        batch_norm = st.checkbox("Batch Normalization", value=True)
-    else:
-        dropout = 0.0
-        batch_norm = False
-        st.info(
-            "Le moteur NumPy exécute une descente de gradient matricielle avec Softmax."
+        activation_fn = st.selectbox("Fonction d'activation", ["relu", "tanh", "sigmoid"])
+        learning_rate = st.select_slider(
+            "Taux d'apprentissage (lr)",
+            options=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+            value=0.001,
         )
 
-    epochs = st.slider(
-        "Nombre d'epochs", min_value=10, max_value=300, value=60, step=10
-    )
-    batch_size = st.select_slider(
-        "Taille de batch", options=[16, 32, 64, 128, 256], value=32
-    )
+        if engine == "Keras (TensorFlow)":
+            dropout = st.slider("Taux de Dropout", 0.0, 0.5, 0.2, 0.05)
+            batch_norm = st.checkbox("Batch Normalization", value=True)
+        else:
+            dropout = 0.0
+            batch_norm = False
+            st.info(
+                "Le moteur NumPy exécute une descente de gradient matricielle avec Softmax."
+            )
+
+        epochs = st.slider(
+            "Nombre d'epochs", min_value=10, max_value=300, value=60, step=10
+        )
+        batch_size = st.select_slider(
+            "Taille de batch", options=[16, 32, 64, 128, 256], value=32
+        )
 
 
 # ==============================================================================

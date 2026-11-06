@@ -23,6 +23,7 @@ dependencies = [
     "tensorflow>=2.21.0",
     "torch>=2.14.1",
     "ucimlrepo>=0.0.7",
+    "mlflow>=3.18.0",
 ]
 
 [project.scripts]

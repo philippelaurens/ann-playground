@@ -3,18 +3,46 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ann_playground_app
+    image: ann-playground:latest
     ports:
       - "8501:8501"
-      - "5000:5000"
     volumes:
-      # Monte le code source pour le rechargement à chaud
+      # Code source monté pour le rechargement à chaud
       - ./src:/app/src
       - ./models:/app/models
       - ./data:/app/data
-      # Isole le venv pour que le dossier .venv du conteneur (généré lors du build) ne soit pas écrasé par l'hôte
+      # Préserve le .venv construit dans l'image
       - /app/.venv
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mlflow:
+    image: ann-playground:latest
+    environment:
+      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000
+    command: >
+      /app/.venv/bin/mlflow server
+      --backend-store-uri sqlite:////app/mlflow-data/mlflow.db
+      --artifacts-destination /app/mlartifacts
+      --serve-artifacts
+      --host 0.0.0.0
+      --port 5000
+    volumes:
+      # Dossier (et non fichier) pour éviter que Docker crée un répertoire mlflow.db
+      - ./mlflow-data:/app/mlflow-data
+      - ./mlartifacts:/app/mlartifacts
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
