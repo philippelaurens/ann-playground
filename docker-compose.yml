@@ -25,7 +25,7 @@ services:
   mlflow:
     image: ann-playground:latest
     environment:
-      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000,ann-playground.odusseos.net:5000
+      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000,${EXTERNAL_HOST}
       - MLFLOW_ENABLE_SYSTEM_METRICS=true
       - MLFLOW_AUTH_CONFIG_PATH=/app/mlflow-data/basic_auth.ini
       - MLFLOW_FLASK_SERVER_SECRET_KEY=${MLFLOW_FLASK_SERVER_SECRET_KEY}
