@@ -24,4 +24,6 @@ MLFLOW_TRACKING_URI: Final[str] = os.getenv(
     # f"sqlite:///{MLFLOW_DB_PATH.resolve()}",
     "http://mlflow:5000",
 )
+os.environ["MLFLOW_TRACKING_USERNAME"] = os.getenv("MLFLOW_TRACKING_USERNAME", "")
+os.environ["MLFLOW_TRACKING_PASSWORD"] = os.getenv("MLFLOW_TRACKING_PASSWORD", "")
 EXPERIMENT_NAME: str = "ANN_Playground"
