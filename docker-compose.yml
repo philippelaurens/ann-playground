@@ -14,6 +14,9 @@ services:
       # Préserve le .venv construit dans l'image
       - /app/.venv
     environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_AUTH_ADMIN_USERNAME}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
