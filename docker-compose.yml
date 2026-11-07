@@ -25,7 +25,9 @@ services:
   mlflow:
     image: ann-playground:latest
     environment:
-      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000
+      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000,ann-playground.odusseos.net:5000
+      - MLFLOW_ENABLE_SYSTEM_METRICS=true
+      - MLFLOW_AUTH_CONFIG_PATH=/app/mlflow-data/basic_auth.ini
     command: >
       /app/.venv/bin/mlflow server
       --backend-store-uri sqlite:////app/mlflow-data/mlflow.db
@@ -34,13 +36,6 @@ services:
       --host 0.0.0.0
       --port 5000
       --cors-allowed-origins "*"
-    user: "${UID:-1000}:${GID:-1000}"
-    volumes:
-      # Dossier (et non fichier) pour éviter que Docker crée un répertoire mlflow.db
-      - ./mlflow-data:/app/mlflow-data
-      - ./mlartifacts:/app/mlartifacts
-    ports:
-      - "5000:5000"
     healthcheck:
       test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
