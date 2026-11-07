@@ -8,7 +8,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 
-from ann_playground.config import PROCESSED_DATA_DIR, EXPERIMENT_NAME, MLFLOW_TRACKING_USERNAME, MLFLOW_TRACKING_PASSWORD
+from ann_playground.config import PROCESSED_DATA_DIR, EXPERIMENT_NAME
 from ann_playground.model.keras_mlp import StreamlitEpochCallback, build_keras_mlp
 from ann_playground.model.numpy_mlp import NumpyMLP
 
