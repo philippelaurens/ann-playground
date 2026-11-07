@@ -33,7 +33,7 @@ services:
       - MLFLOW_AUTH_ADMIN_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}      
     command: >
       /app/.venv/bin/mlflow server
-      --app-name basic-auth
+      --app-name basic-auth:q!
       --backend-store-uri sqlite:////app/mlflow-data/mlflow.db
       --artifacts-destination /app/mlartifacts
       --serve-artifacts
