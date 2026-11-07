@@ -36,6 +36,13 @@ services:
       --host 0.0.0.0
       --port 5000
       --cors-allowed-origins "*"
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      # Dossier (et non fichier) pour éviter que Docker crée un répertoire mlflow.db
+      - ./mlflow-data:/app/mlflow-data
+      - ./mlartifacts:/app/mlartifacts
+    ports:
+      - "5000:5000"
     healthcheck:
       test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
