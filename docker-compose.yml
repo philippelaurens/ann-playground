@@ -11,6 +11,7 @@ services:
       - ./src:/app/src
       - ./models:/app/models
       - ./data:/app/data
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
       # Préserve le .venv construit dans l'image
       - /app/.venv
     environment:

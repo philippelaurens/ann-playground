@@ -12,6 +12,7 @@ wheels/
 # Securite
 .env
 *.ini
+.streamlit/secrets.toml
 
 # Caches Python
 *.pyc

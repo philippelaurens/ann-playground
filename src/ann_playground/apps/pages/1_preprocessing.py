@@ -33,13 +33,25 @@ from ann_playground.data.data_visualisation import (
     scree_plot_with_ideal_components,
 )
 
+# ---------------------------------------------------------------------------
+# Authentification
+# ---------------------------------------------------------------------------
+
+# Vérification de sécurité obligatoire sur chaque sous-pages
+if not st.session_state.get("authenticated", False):
+    st.warning("⚠️ Veuillez vous connecter depuis la page d'accueil pour accéder à cette section.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Preprocessing
+# ---------------------------------------------------------------------------
+
 st.set_page_config(
     page_title="ANN Playground · Data Studio",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
 
 def cached_load_source_data(file_path: Path | Any) -> pd.DataFrame:
     """Fonction wrapper mise en cache pour Streamlit qui appelle la logique de chargement."""

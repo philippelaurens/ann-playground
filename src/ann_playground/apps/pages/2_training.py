@@ -37,10 +37,20 @@ def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame |
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
 
+# ---------------------------------------------------------------------------
+# Authentification
+# ---------------------------------------------------------------------------
 
-# ==============================================================================
+# Vérification de sécurité obligatoire sur chaque sous-pages
+if not st.session_state.get("authenticated", False):
+    st.warning("⚠️ Veuillez vous connecter depuis la page d'accueil pour accéder à cette section.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------------
+
 # Start MLFlow
-# ==============================================================================
 
 try:
     experiment_id = init_mlflow_experiment(EXPERIMENT_NAME)
@@ -48,9 +58,8 @@ except Exception as err:
     st.warning(f"MLflow service connection unavailable: {err}. Runs will attempt reconnect on launch.")
     experiment_id = "0"
 
-# ==============================================================================
+
 # UI Setup and Sidebar
-# ==============================================================================
 
 df_train, df_test = cached_load_prepared_datasets()
 
@@ -100,9 +109,7 @@ with st.sidebar:
         )
 
 
-# ==============================================================================
 # Main Content
-# ==============================================================================
 
 if df_train is None or df_test is None:
     st.warning(
