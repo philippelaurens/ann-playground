@@ -1,5 +1,6 @@
 import os
 import json
+import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import mlflow
@@ -9,6 +10,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
 from ann_playground.config import MLFLOW_TRACKING_URI
+from ann_playground.model.numpy_mlp_wrapper import NumpyMLPWrapper
 
 
 def get_tracking_uri() -> str:
@@ -152,34 +154,83 @@ def log_keras_training(
 def log_numpy_training(
     run_name: str,
     params: Dict[str, Any],
-    history: List[Dict[str, float]],
+    model: Any, # Votre instance de NumpyMLP entraînée
+    history: List[Dict[str, float]], # Format : [{'loss': 0.5, 'accuracy': 0.8}, ...]
     metrics_test: Dict[str, float],
     fig_cm: Any,
+    output_dir: str = "data/processed_data",
 ) -> None:
-    """
-    Log hyperparameters, step-wise metrics, and artifacts for the custom NumPy MLP.
+    if not mlflow.get_tracking_uri():
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
-    Parameters
-    ----------
-    run_name : str
-        Descriptive name for the MLflow run.
-    params : Dict[str, Any]
-        Dictionary of hyperparameters.
-    history : List[Dict[str, float]]
-        Per-epoch metric records collected during gradient descent.
-    metrics_test : Dict[str, float]
-        Evaluation metrics on the test partition.
-    fig_cm : Any
-        Plotly confusion matrix figure.
-    """
-    uri: str = get_tracking_uri()
-    mlflow.set_tracking_uri(uri)
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    
+    # Lecture de la configuration pour savoir si la PCA est active
+    config_path = out_path / "pipeline_config.json"
+    use_pca = False
+    pipeline_config = {}
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            pipeline_config = json.load(f)
+            use_pca = pipeline_config.get("use_pca", False)
 
+    # Sauvegarde locale temporaire du modèle NumpyMLP (avant le log)
+    local_model_path = out_path / "numpy_mlp_model.pkl"
+    with open(local_model_path, "wb") as f:
+        pickle.dump(model, f)
+
+    # Démarrage du run unique MLflow englobant TOUT
     with mlflow.start_run(run_name=run_name):
+        
+        # Log des hyperparamètres de base
         mlflow.log_params(params)
 
+        # Log intelligent selon l'état PCA ou Standard
+        if use_pca:
+            n_components = pipeline_config.get("n_components")
+            if n_components:
+                mlflow.log_param("n_components", n_components)
+            
+            pca_path = out_path / "pca_model.pkl"
+            if pca_path.exists():
+                mlflow.log_artifact(str(pca_path), artifact_path="preprocessing")
+        else:
+            num_path = out_path / "num_features.json"
+            cat_path = out_path / "cat_features.json"
+            
+            if num_path.exists():
+                with open(num_path, "r", encoding="utf-8") as f:
+                    num_feats = json.load(f)
+                mlflow.log_param("num_features_count", len(num_feats))
+                mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
+            
+            if cat_path.exists():
+                with open(cat_path, "r", encoding="utf-8") as f:
+                    cat_feats = json.load(f)
+                mlflow.log_param("cat_features_count", len(cat_feats))
+                mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")
+
+        # Log du ColumnTransformer et de la Config (communs)
+        transformer_path = out_path / "column_transformer.pkl"
+        if transformer_path.exists():
+            mlflow.log_artifact(str(transformer_path), artifact_path="preprocessing")
+
+        if config_path.exists():
+            mlflow.log_artifact(str(config_path), artifact_path="config")
+
+        # Log des métriques d'entraînement époque par époque (NumPy)
         for epoch, metric_dict in enumerate(history):
             mlflow.log_metrics(metric_dict, step=epoch)
 
+        # Log des métriques de test et de la matrice de confusion
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
+
+        # Log officiel du modèle NumPy via le Wrapper pyfunc
+        mlflow.pyfunc.log_model(
+            artifact_path="numpy_model",
+            python_model=NumpyMLPWrapper(),
+            artifacts={"numpy_model_file": str(local_model_path)},
+            registered_model_name="NumpyMLP_Classifier"
+        )

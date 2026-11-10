@@ -343,6 +343,7 @@ with tab_train:
 
             log_numpy_training(
                 run_name=f"numpy_mlp_{activation_fn}_lr{learning_rate}",
+                model=np_model,
                 params=run_params,
                 history=records,
                 metrics_test=metrics_summary,
