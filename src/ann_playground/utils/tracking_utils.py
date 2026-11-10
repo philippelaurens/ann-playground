@@ -1,5 +1,7 @@
-from typing import Any, Dict, List, Optional
 import os
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 import mlflow
 import mlflow.keras
 from mlflow.entities import Experiment
@@ -73,33 +75,65 @@ def log_keras_training(
     history: Dict[str, List[float]],
     metrics_test: Dict[str, float],
     fig_cm: Any,
+    output_dir: Path | str = "data/processed_data", # Ajout pour pointer vers les artefacts locaux
 ) -> None:
-    """
-    Log hyperparameters, learning curves, final test metrics, and confusion matrix for Keras.
-
-    Parameters
-    ----------
-    run_name : str
-        Descriptive name for the MLflow run.
-    params : Dict[str, Any]
-        Dictionary of hyperparameters.
-    model : Any
-        Fitted Keras model instance.
-    history : Dict[str, List[float]]
-        Training metrics dictionary returned by model.fit().
-    metrics_test : Dict[str, float]
-        Evaluation metrics on the test partition.
-    fig_cm : Any
-        Plotly confusion matrix figure.
-    """
-    # S'assure que le tracking URI pointe bien vers le service MLflow du réseau Docker
-    # (Il récupère l'env var MLFLOW_TRACKING_URI définie dans le docker-compose)
     if not mlflow.get_tracking_uri():
         mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
+    out_path = Path(output_dir)
+    config_path = out_path / "pipeline_config.json"
+
+    # Lecture de la configuration pour savoir si la PCA est active
+    use_pca = False
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            pipeline_config = json.load(f)
+            use_pca = pipeline_config.get("use_pca", False)
+
     with mlflow.start_run(run_name=run_name):
+        # Log des hyperparamètres de base
         mlflow.log_params(params)
 
+        # Log intelligent selon l'état PCA ou Standard
+        if use_pca:
+            # Si PCA : on log le nombre de composantes en paramètre
+            n_components = pipeline_config.get("n_components")
+            if n_components:
+                mlflow.log_param("n_components", n_components)
+            
+            # On log le modèle PCA en tant qu'artefact
+            pca_path = out_path / "pca_model.pkl"
+            if pca_path.exists():
+                mlflow.log_artifact(str(pca_path), artifact_path="preprocessing")
+        else:
+            # Si Standard : on log le compte des features en paramètre...
+            num_path = out_path / "num_features.json"
+            cat_path = out_path / "cat_features.json"
+            
+            if num_path.exists():
+                with open(num_path, "r", encoding="utf-8") as f:
+                    num_feats = json.load(f)
+                mlflow.log_param("num_features_count", len(num_feats))
+                # ... ET on conserve la trace exacte de la liste en l'envoyant en artefact
+                mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
+            
+            if cat_path.exists():
+                with open(cat_path, "r", encoding="utf-8") as f:
+                    cat_feats = json.load(f)
+                mlflow.log_param("cat_features_count", len(cat_feats))
+                # Idem pour les catégorielles
+                mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")
+
+        # Log du ColumnTransformer (commun aux deux modes)
+        transformer_path = out_path / "column_transformer.pkl"
+        if transformer_path.exists():
+            mlflow.log_artifact(str(transformer_path), artifact_path="preprocessing")
+
+        # Log du fichier de configuration global
+        if config_path.exists():
+            mlflow.log_artifact(str(config_path), artifact_path="config")
+
+        # Log des métriques d'entraînement (époques)
         first_metric: str = next(iter(history.keys()))
         epochs_count: int = len(history[first_metric])
 
@@ -109,6 +143,7 @@ def log_keras_training(
             }
             mlflow.log_metrics(step_metrics, step=epoch)
 
+        # Log des métriques de test, de la matrice de confusion et du modèle Keras
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
         mlflow.keras.log_model(model, artifact_path="model")
