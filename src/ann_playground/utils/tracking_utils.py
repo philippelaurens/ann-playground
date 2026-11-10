@@ -92,8 +92,10 @@ def log_keras_training(
     fig_cm : Any
         Plotly confusion matrix figure.
     """
-    uri: str = get_tracking_uri()
-    mlflow.set_tracking_uri(uri)
+    # S'assure que le tracking URI pointe bien vers le service MLflow du réseau Docker
+    # (Il récupère l'env var MLFLOW_TRACKING_URI définie dans le docker-compose)
+    if not mlflow.get_tracking_uri():
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
 
     with mlflow.start_run(run_name=run_name):
         mlflow.log_params(params)
@@ -110,7 +112,6 @@ def log_keras_training(
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
         mlflow.keras.log_model(model, artifact_path="model")
-
 
 
 def log_numpy_training(

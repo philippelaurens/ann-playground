@@ -586,6 +586,10 @@ with tab_pca:
                 X_train_pca = pca_personnalise.fit_transform(X_train_prep)
                 X_test_pca = pca_personnalise.transform(X_test_prep)
 
+                # Export for inference
+                
+
+                # Export to Parquet
                 train_file, test_file = export_pca_parquet(
                     X_train_pca=X_train_pca,
                     X_test_pca=X_test_pca,
