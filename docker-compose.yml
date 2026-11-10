@@ -58,3 +58,30 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Votre Dockerfile existant à la racine
+    image: ann-playground:latest
+    container_name: ann-playground-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./main.py:/app/main.py  # Votre fichier FastAPI à la racine
+      - ./models:/app/models
+      - ./data:/app/data
+      - /app/.venv
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_AUTH_ADMIN_USERNAME}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    command: >
+      /app/.venv/bin/uvicorn src.ann_playground.apps.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: unless-stopped

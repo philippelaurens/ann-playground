@@ -5,7 +5,6 @@ from pathlib import Path
 import streamlit as st
 from ann_playground.config import DATA,  PROCESSED_DATA_DIR
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -15,7 +14,7 @@ REQUIRED_ARTIFACTS = [
 ]
 
 st.set_page_config(
-    page_title="ANN Playground",
+    page_title="Home",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
