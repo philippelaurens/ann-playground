@@ -422,12 +422,12 @@ with tab_prep:
             stratify=strat_target,
         )
 
-        # 2. Encodage de la target
+        # Encodage de la target
         label_enc = LabelEncoder()
         y_train = label_enc.fit_transform(y_train_raw.astype(str))
         y_test = label_enc.transform(y_test_raw.astype(str))
 
-        # # 3. Fit du ColumnTransformer uniquement sur X_train
+        # Fit du ColumnTransformer uniquement sur X_train
         X_train_proc, X_test_proc, transformer = preprocess_data(
             X_train=X_train_raw,
             X_test=X_test_raw,
@@ -435,7 +435,7 @@ with tab_prep:
             categorical_columns=cat_features,
         )
 
-        # 4. Récupération des noms de colonnes transformées
+        # Récupération des noms de colonnes transformées
         if hasattr(transformer, "get_feature_names_out"):
             encoded_cols = [str(c) for c in transformer.get_feature_names_out()]
         else:
@@ -444,12 +444,15 @@ with tab_prep:
         df_train_features = pd.DataFrame(X_train_proc, columns=encoded_cols)
         df_test_features = pd.DataFrame(X_test_proc, columns=encoded_cols)
 
-        # # 5. Export unique au format Parquet
+        # Export unique au format Parquet
         train_path, test_path = export_train_test_parquet(
             X_train=df_train_features,
             X_test=df_test_features,
             y_train=y_train,
             y_test=y_test,
+            num_features=num_features,
+            cat_features=cat_features,
+            transformer=transformer,
             output_dir=PROCESSED_DATA_DIR,
             target_name=target_name,
         )
@@ -522,7 +525,7 @@ with tab_pca:
     
     else:
 
-        X_train, X_test = cached_load_prepared_datasets()
+        X_train, X_test, transformer, pca, num_features, cat_features  = cached_load_prepared_datasets()
 
         X_train_prep = X_train.drop(columns=[target_name]).values.astype(np.float32)
         y_train = X_train[target_name].values.astype(np.int64)
@@ -587,7 +590,7 @@ with tab_pca:
                 X_test_pca = pca_personnalise.transform(X_test_prep)
 
                 # Export for inference
-                
+
 
                 # Export to Parquet
                 train_file, test_file = export_pca_parquet(
@@ -595,6 +598,7 @@ with tab_pca:
                     X_test_pca=X_test_pca,
                     y_train=y_train,
                     y_test=y_test,
+                    pca=pca_personnalise,
                     output_dir=PROCESSED_DATA_DIR,
                     target_name=target_name
                 )
