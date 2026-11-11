@@ -1,14 +1,11 @@
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
-import time
-import numpy as np
-import pandas as pd
-import plotly.express as px
-import matplotlib.pyplot as plt
+
 import streamlit as st
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.decomposition import PCA
+import requests
+import mlflow
+import json
+import os
+
+from mlflow.tracking import MlflowClient
 
 from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR
 
@@ -64,51 +61,87 @@ with st.sidebar:
         st.caption("Module générique d'évaluation")
 
 
+
+def load_feature_lists_for_run(run_id):
+
+    # Initialisation du client (pointe par exemple sur votre serveur MLflow ou le dossier local mlruns)
+    client = MlflowClient()
+
+    # Récupérer les métadonnées globales du run (statut, date, etc.)
+    run = client.get_run(run_id)
+    st.markdown(f"Statut du run :{run.info.status}")
+    st.markdown(f"Paramètres : {run.data.params}")
+    st.markdown(f"Métriques : {run.data.metrics}")
+
+    # Télécharger les artéfacts enregistrés (comme votre column_transformer.pkl ou vos listes de features)
+    # MLflow télécharge l'artéfact dans un dossier temporaire local et vous retourne le chemin
+    # 1. Télécharger le dossier d'artéfacts du run sélectionné
+    local_dir = mlflow.artifacts.download_artifacts(run_id=run_id)
+
+    st.markdown(f"local_dir : {local_dir}")
+
+    # 2. Charger les listes depuis les fichiers JSON sauvegardés dans les artéfacts
+    with open(os.path.join(local_dir, "preprocessing/num_features.json"), "r") as f:
+        num_features = json.load(f)
+
+    with open(os.path.join(local_dir, "preprocessing/cat_features.json"), "r") as f:
+        cat_features = json.load(f)
+
+    return num_features, cat_features
+
+
+
 # ==============================================================================
 # Structure principale en onglets
 # ==============================================================================
 
-import streamlit as st
-import requests
 
 st.subheader("🎯 Inférence via FastAPI")
 
+run_id = "f72d427571414cdf9951d485e237b388"
+
 # Supposons que vous avez récupéré le run_id sélectionné par l'utilisateur
 # (par exemple via un selectbox alimenté par vos runs MLflow)
-selected_run_id = st.session_state.get("selected_run_id", "votre_run_id_par_defaut")
+selected_run_id = st.session_state.get("selected_run_id", run_id)
 
-# --- 1. Formulaire de saisie des features ---
-with st.form("inference_form"):
-    st.markdown("### Saisir les caractéristiques d'entrée")
-    
-    # Exemple avec quelques champs numériques (à adapter selon vos features réelles)
-    f1 = st.number_input("Feature 1", value=0.0)
-    f2 = st.number_input("Feature 2", value=0.0)
-    f3 = st.number_input("Feature 3", value=0.0)
-    
-    # Bouton de soumission du formulaire
+# Supposons que vos artéfacts vous renvoient ces deux listes pour le run sélectionné :
+num_features, cat_features = load_feature_lists_for_run(selected_run_id)
+
+user_inputs = {}
+
+with st.form("prediction_form"):
+    st.subheader("Variables Numériques")
+    for feature in num_features:
+        user_inputs[feature] = st.number_input(label=feature, value=0.0)
+        
+    st.subheader("Variables Catégorielles")
+    for feature in cat_features:
+        # Ici, vous pouvez même interroger les catégories valides si vous les avez stockées, 
+        # ou laisser un champ texte / selectbox basique
+        user_inputs[feature] = st.text_input(label=feature, value="")
+        
     submitted = st.form_submit_button("Lancer la prédiction")
 
-# --- 2. Appel de l'API et traitement de la réponse ---
+# Appel de l'API et traitement de la réponse ---
 if submitted:
-    # Construction du payload attendu par la classe Pydantic (PredictionRequest)
-    payload = {
-        "features": [f1, f2, f3]
-    }
-    
+
     # URL de votre service FastAPI (en interne sur le réseau Docker, ou http://localhost:8000 si test en local hors Docker)
     api_url = f"http://api:8000/predict/{selected_run_id}"
-    
+
+    # Construction du payload attendu par la classe Pydantic (PredictionRequest)
+    payload = {
+        "features": user_inputs
+    }
+
     try:
-        # Requête POST vers FastAPI
-        with st.spinner("Calcul de la prédiction en cours..."):
-            response = requests.post(api_url, json=payload)
+        # On envoie tout dans un seul dictionnaire global sous la clé "features"
+        response = requests.post(api_url,json=payload)
         
         # Vérification du code de statut HTTP
         if response.status_code == 200:
             # Récupération du dictionnaire JSON renvoyé par l'API
             result = response.json()
-            
+
             # Affichage propre des résultats reçus
             st.success("Prédiction effectuée avec succès !")
             
@@ -119,8 +152,8 @@ if submitted:
                 st.info(f"Modèle utilisé : `{result['model_used'][:8]}...`\n\nPCA active : `{result['pca_used']}`")
             
             with st.expander("Voir les sorties brutes du modèle (raw_output)"):
-                st.json(result["raw_output"])
-                
+                st.json(result["raw_output"])        
+                    
         else:
             # Affichage de l'erreur renvoyée par FastAPI (ex: 404 si run_id inconnu, 400 si erreur de shape)
             st.error(f"Erreur API ({response.status_code}) : {response.json().get('detail', response.text)}")

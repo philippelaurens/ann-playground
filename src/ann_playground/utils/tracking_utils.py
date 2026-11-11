@@ -96,6 +96,24 @@ def log_keras_training(
         # Log des hyperparamètres de base
         mlflow.log_params(params)
 
+        # Si Standard : on log le compte des features en paramètre...
+        num_path = out_path / "num_features.json"
+        cat_path = out_path / "cat_features.json"
+        
+        if num_path.exists():
+            with open(num_path, "r", encoding="utf-8") as f:
+                num_feats = json.load(f)
+            mlflow.log_param("num_features_count", len(num_feats))
+            # ... ET on conserve la trace exacte de la liste en l'envoyant en artefact
+            mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
+        
+        if cat_path.exists():
+            with open(cat_path, "r", encoding="utf-8") as f:
+                cat_feats = json.load(f)
+            mlflow.log_param("cat_features_count", len(cat_feats))
+            # Idem pour les catégorielles
+            mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")        
+
         # Log intelligent selon l'état PCA ou Standard
         if use_pca:
             # Si PCA : on log le nombre de composantes en paramètre
@@ -107,24 +125,6 @@ def log_keras_training(
             pca_path = out_path / "pca_model.pkl"
             if pca_path.exists():
                 mlflow.log_artifact(str(pca_path), artifact_path="preprocessing")
-        else:
-            # Si Standard : on log le compte des features en paramètre...
-            num_path = out_path / "num_features.json"
-            cat_path = out_path / "cat_features.json"
-            
-            if num_path.exists():
-                with open(num_path, "r", encoding="utf-8") as f:
-                    num_feats = json.load(f)
-                mlflow.log_param("num_features_count", len(num_feats))
-                # ... ET on conserve la trace exacte de la liste en l'envoyant en artefact
-                mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
-            
-            if cat_path.exists():
-                with open(cat_path, "r", encoding="utf-8") as f:
-                    cat_feats = json.load(f)
-                mlflow.log_param("cat_features_count", len(cat_feats))
-                # Idem pour les catégorielles
-                mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")
 
         # Log du ColumnTransformer (commun aux deux modes)
         transformer_path = out_path / "column_transformer.pkl"
