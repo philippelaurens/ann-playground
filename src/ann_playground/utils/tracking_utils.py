@@ -70,6 +70,45 @@ def init_mlflow_experiment(
     return experiment_id
 
 
+def get_metrics_to_log(
+        class_report: Dict[str, Any]
+) -> Dict[str, float]:
+    metrics_to_log = {}
+    
+    # Parcours du rapport de classification
+    for class_name, metrics in class_report.items():
+
+        # On ignore explicitement l'accuracy, macro avg et weighted avg
+        if class_name in ['accuracy', 'macro avg', 'weighted avg']:
+            continue 
+        
+        # Cas particulier de l'accuracy globale (valeur flottante simple)
+        # if class_name == 'accuracy':
+        #   metrics_to_log["accuracy"] = metrics
+        #    continue
+            
+        # Optionnel : Gestion propre des moyennes globales si tu souhaites les logger aussi
+        # if class_name in ['macro avg', 'weighted avg']:
+        #    prefix = class_name.replace(" ", "_") # donne 'macro_avg' ou 'weighted_avg'
+        #    metrics_to_log[f"{prefix}_precision"] = metrics['precision']
+        #    metrics_to_log[f"{prefix}_recall"] = metrics['recall']
+        #    metrics_to_log[f"{prefix}_f1_score"] = metrics['f1-score']
+        #    continue
+        
+        # Pour chaque classe individuelle
+        if isinstance(metrics, dict):
+            precision = metrics['precision']
+            recall = metrics['recall']
+            f1 = metrics['f1-score']
+            
+            # Formatage des noms de métriques pour MLflow (ex: class_2_f1_score)
+            metrics_to_log[f"class_{class_name}_precision"] = precision
+            metrics_to_log[f"class_{class_name}_recall"] = recall
+            metrics_to_log[f"class_{class_name}_f1_score"] = f1       
+            
+    return metrics_to_log
+
+
 def log_keras_training(
     run_name: str,
     params: Dict[str, Any],
@@ -77,6 +116,7 @@ def log_keras_training(
     history: Dict[str, List[float]],
     metrics_test: Dict[str, float],
     fig_cm: Any,
+    report_dict: Dict[str, Any],
     output_dir: Path | str = "data/processed_data", # Ajout pour pointer vers les artefacts locaux
 ) -> None:
     if not mlflow.get_tracking_uri():
@@ -146,8 +186,11 @@ def log_keras_training(
             mlflow.log_metrics(step_metrics, step=epoch)
 
         # Log des métriques de test, de la matrice de confusion et du modèle Keras
+        metrics_to_log = get_metrics_to_log(report_dict)
+        
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
+        mlflow.log_metrics(metrics_to_log)
         mlflow.keras.log_model(model, artifact_path="model")
 
 
@@ -158,6 +201,7 @@ def log_numpy_training(
     history: List[Dict[str, float]], # Format : [{'loss': 0.5, 'accuracy': 0.8}, ...]
     metrics_test: Dict[str, float],
     fig_cm: Any,
+    report_dict: Dict[str, Any],
     output_dir: str = "data/processed_data",
 ) -> None:
     if not mlflow.get_tracking_uri():
@@ -186,6 +230,21 @@ def log_numpy_training(
         # Log des hyperparamètres de base
         mlflow.log_params(params)
 
+        num_path = out_path / "num_features.json"
+        cat_path = out_path / "cat_features.json"
+        
+        if num_path.exists():
+            with open(num_path, "r", encoding="utf-8") as f:
+                num_feats = json.load(f)
+            mlflow.log_param("num_features_count", len(num_feats))
+            mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
+        
+        if cat_path.exists():
+            with open(cat_path, "r", encoding="utf-8") as f:
+                cat_feats = json.load(f)
+            mlflow.log_param("cat_features_count", len(cat_feats))
+            mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")
+
         # Log intelligent selon l'état PCA ou Standard
         if use_pca:
             n_components = pipeline_config.get("n_components")
@@ -195,22 +254,7 @@ def log_numpy_training(
             pca_path = out_path / "pca_model.pkl"
             if pca_path.exists():
                 mlflow.log_artifact(str(pca_path), artifact_path="preprocessing")
-        else:
-            num_path = out_path / "num_features.json"
-            cat_path = out_path / "cat_features.json"
-            
-            if num_path.exists():
-                with open(num_path, "r", encoding="utf-8") as f:
-                    num_feats = json.load(f)
-                mlflow.log_param("num_features_count", len(num_feats))
-                mlflow.log_artifact(str(num_path), artifact_path="preprocessing")
-            
-            if cat_path.exists():
-                with open(cat_path, "r", encoding="utf-8") as f:
-                    cat_feats = json.load(f)
-                mlflow.log_param("cat_features_count", len(cat_feats))
-                mlflow.log_artifact(str(cat_path), artifact_path="preprocessing")
-
+                
         # Log du ColumnTransformer et de la Config (communs)
         transformer_path = out_path / "column_transformer.pkl"
         if transformer_path.exists():
@@ -224,8 +268,10 @@ def log_numpy_training(
             mlflow.log_metrics(metric_dict, step=epoch)
 
         # Log des métriques de test et de la matrice de confusion
+        metrics_to_log = get_metrics_to_log(report_dict)
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
+        mlflow.log_metrics(metrics_to_log)
 
         # Log officiel du modèle NumPy via le Wrapper pyfunc
         mlflow.pyfunc.log_model(

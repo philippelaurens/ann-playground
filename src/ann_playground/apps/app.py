@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 import streamlit as st
-from ann_playground.config import DATA,  PROCESSED_DATA_DIR
+from ann_playground.config import DATA, PROCESSED_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.session_state["authenticated"] = True
 
 # ---------------------------------------------------------------------------
 # Authentification

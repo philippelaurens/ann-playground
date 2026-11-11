@@ -201,6 +201,9 @@ with tab_train:
                 color_continuous_scale="Blues",
                 title=f"Confusion Matrix - Keras ({activation_fn})",
             )
+            report_dict = classification_report(
+                y_test, y_pred, target_names=class_labels, output_dict=True
+            )
 
             run_params = {
                 "engine": "keras",
@@ -218,12 +221,13 @@ with tab_train:
             }
 
             log_keras_training(
-               run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
-               params=run_params,
-               model=model,
-               history=history.history,
-               metrics_test=metrics_summary,
-               fig_cm=fig_cm,
+                run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
+                params=run_params,
+                model=model,
+                history=history.history,
+                metrics_test=metrics_summary,
+                fig_cm=fig_cm,
+                report_dict=report_dict,
             )
 
             st.session_state["trained_model"] = model
@@ -327,6 +331,9 @@ with tab_train:
                 color_continuous_scale="Blues",
                 title=f"Confusion Matrix - NumPy ({activation_fn})",
             )
+            report_dict = classification_report(
+                y_test, y_pred, target_names=class_labels, output_dict=True
+            )
 
             run_params = {
                 "engine": "numpy_oop",
@@ -348,6 +355,7 @@ with tab_train:
                 history=records,
                 metrics_test=metrics_summary,
                 fig_cm=fig_cm,
+                report_dict=report_dict,
             )
 
             st.session_state["trained_model"] = np_model

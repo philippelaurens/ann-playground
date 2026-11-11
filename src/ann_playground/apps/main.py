@@ -17,7 +17,7 @@ model_cache = {}
 preprocessing_cache = {}
 
 # Liste officielle de vos 16 features attendues
-EXPECTED_FEATURES = [
+NUM_FEATURES = [
     "Previous qualification (grade)",
     "Admission grade",
     "Age at enrollment",
@@ -36,6 +36,31 @@ EXPECTED_FEATURES = [
     "GDP"
 ]
 
+CAT_FEATURES = [
+    "Marital status",
+    "Application mode",
+    "Application order",
+    "Course",
+    "Daytime/evening attendance",
+    "Previous qualification",
+    "Nacionality",
+    "Mother's qualification",
+    "Father's qualification",
+    "Mother's occupation",
+    "Father's occupation",
+    "Displaced",
+    "Educational special needs",
+    "Debtor",
+    "Tuition fees up to date",
+    "Gender",
+    "Scholarship holder",
+    "International",
+    "Curricular units 1st sem (without evaluations)",
+    "Curricular units 2nd sem (without evaluations)"
+]
+
+EXPECTED_FEATURES = [*NUM_FEATURES, *CAT_FEATURES]
+
 
 # Avec class PredictionRequest(BaseModel), Pydantic intercepte le JSON envoyé par Streamlit, 
 #  vérifie qu'il y a bien une clé racine nommée features, et s'assure que 
@@ -48,7 +73,6 @@ class PredictionRequest(BaseModel):
         description="Dictionnaire dynamique des features transmis par Streamlit"
     )
         
-
 def load_run_artifacts(run_id: str):
     """Charge et met en cache les artéfacts MLflow pour un run donné."""
     if run_id in model_cache:
