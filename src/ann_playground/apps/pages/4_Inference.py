@@ -279,51 +279,6 @@ if selected_run_id is not None:
     # 2 · Distributions & Relations
     # ------------------------------------------------------------------------------
 
-    # Liste officielle de vos 16 features attendues
-    NUM_FEATURES = [
-        "Previous qualification (grade)",
-        "Admission grade",
-        "Age at enrollment",
-        "Curricular units 1st sem (credited)",
-        "Curricular units 1st sem (enrolled)",
-        "Curricular units 1st sem (evaluations)",
-        "Curricular units 1st sem (approved)",
-        "Curricular units 1st sem (grade)",
-        "Curricular units 2nd sem (credited)",
-        "Curricular units 2nd sem (enrolled)",
-        "Curricular units 2nd sem (evaluations)",
-        "Curricular units 2nd sem (approved)",
-        "Curricular units 2nd sem (grade)",
-        "Unemployment rate",
-        "Inflation rate",
-        "GDP"
-    ]
-
-    CAT_FEATURES = [
-        "Marital Status",
-        "Application mode",
-        "Application order",
-        "Course",
-        "Daytime/evening attendance",
-        "Previous qualification",
-        "Nacionality",
-        "Mother's qualification",
-        "Father's qualification",
-        "Mother's occupation",
-        "Father's occupation",
-        "Displaced",
-        "Educational special needs",
-        "Debtor",
-        "Tuition fees up to date",
-        "Gender",
-        "Scholarship holder",
-        "International",
-        "Curricular units 1st sem (without evaluations)",
-        "Curricular units 2nd sem (without evaluations)"
-    ]
-
-    expected_features = NUM_FEATURES + CAT_FEATURES
-
     with tab_inference:
 
         st.markdown(f"#### Run ID de l'entraînement : {run_id}")
@@ -334,6 +289,7 @@ if selected_run_id is not None:
         if num_features or cat_features:
 
             user_inputs = {}
+            expected_features = num_features + cat_features
 
             # Gestion de l'état dans session_state
             if "prediction_result" not in st.session_state:
