@@ -158,178 +158,183 @@ with st.sidebar:
 
 run_id = selected_run_id
 
-# Supposons que vous avez récupéré le run_id sélectionné par l'utilisateur
-# (par exemple via un selectbox alimenté par vos runs MLflow)
-selected_run_id = st.session_state.get("selected_run_id", run_id)
+if selected_run_id is not None:
 
-tab_run, tab_inference = st.tabs(
-    [
-        "1 · Configuration du Run MLflow",
-        "2 · Inference",
-    ]
-)
+    # Supposons que vous avez récupéré le run_id sélectionné par l'utilisateur
+    # (par exemple via un selectbox alimenté par vos runs MLflow)
+    selected_run_id = st.session_state.get("selected_run_id", run_id)
 
-# ------------------------------------------------------------------------------
-# 1 · Diagnostic structurel
-# ------------------------------------------------------------------------------
+    tab_run, tab_inference = st.tabs(
+        [
+            "1 · Configuration du Run MLflow",
+            "2 · Inference",
+        ]
+    )
 
-parameters, metrics = load_parameters_lists_for_run(run_id)
-num_features, cat_features, matrix_confusion_content = load_feature_lists_for_run(selected_run_id)
+    # ------------------------------------------------------------------------------
+    # 1 · Diagnostic structurel
+    # ------------------------------------------------------------------------------
 
-with tab_run:
+    parameters, metrics = load_parameters_lists_for_run(run_id)
+    num_features, cat_features, matrix_confusion_content = load_feature_lists_for_run(selected_run_id)
 
-    st.markdown(f"#### Run ID de l'entraînement : {run_id}")
+    with tab_run:
 
-    if parameters and metrics:
+        st.markdown(f"#### Run ID de l'entraînement : {run_id}")
 
-        # ### Metrics et Matrice de confusion
-        d1, d2, d3, d4, d5, d6 = st.columns(6)
-        d1.metric("accuracy", f"{metrics['accuracy'] * 100:.2f} %")
-        d2.metric("loss", f"{metrics['loss'] * 100:.2f} %")
-        d3.metric("val_accuracy", f"{metrics['val_accuracy'] * 100:.2f} %")
-        d4.metric("val_loss", f"{metrics['val_loss'] * 100:.2f} %")
-        d6.metric("test_accuracy", f"{metrics['test_accuracy'] * 100:.2f} %")
-        d5.metric("test_loss", f"{metrics['test_loss'] * 100:.2f} %")
+        if parameters and metrics:
 
-        components.html(matrix_confusion_content, height=550, scrolling=True)
+            # ### Metrics et Matrice de confusion
+            d1, d2, d3, d4, d5, d6 = st.columns(6)
+            d1.metric("accuracy", f"{metrics['accuracy'] * 100:.2f} %")
+            d2.metric("loss", f"{metrics['loss'] * 100:.2f} %")
+            d3.metric("val_accuracy", f"{metrics['val_accuracy'] * 100:.2f} %")
+            d4.metric("val_loss", f"{metrics['val_loss'] * 100:.2f} %")
+            d6.metric("test_accuracy", f"{metrics['test_accuracy'] * 100:.2f} %")
+            d5.metric("test_loss", f"{metrics['test_loss'] * 100:.2f} %")
 
-        # ### Performance par Classe
-        metrics_data = {}
-        for k, v in metrics.items():
-            if k.startswith("class_"):
-                # On enlève "class_" et on sépare au dernier underscore pour isoler la métrique (precision, recall, f1_score)
-                body = k[6:]
-                class_name, metric = body.rsplit("_", 1)
-                
-                # Identification de la métrique par son suffixe exact
-                if body.endswith("_precision"):
-                    class_name = body[:-10]
-                    metric = "Precision"
-                elif body.endswith("_recall"):
-                    class_name = body[:-7]
-                    metric = "Recall"
-                elif body.endswith("_f1_score"):
-                    class_name = body[:-9]
-                    metric = "F1-Score"
-                else:
-                    continue
-            
-                if class_name not in metrics_data:
-                    metrics_data[class_name] = {"Classe": class_name}
+            components.html(matrix_confusion_content, height=550, scrolling=True)
+
+            # ### Performance par Classe
+            metrics_data = {}
+            for k, v in metrics.items():
+                if k.startswith("class_"):
+                    # On enlève "class_" et on sépare au dernier underscore pour isoler la métrique (precision, recall, f1_score)
+                    body = k[6:]
+                    class_name, metric = body.rsplit("_", 1)
                     
-                metrics_data[class_name][metric] = v
+                    # Identification de la métrique par son suffixe exact
+                    if body.endswith("_precision"):
+                        class_name = body[:-10]
+                        metric = "Precision"
+                    elif body.endswith("_recall"):
+                        class_name = body[:-7]
+                        metric = "Recall"
+                    elif body.endswith("_f1_score"):
+                        class_name = body[:-9]
+                        metric = "F1-Score"
+                    else:
+                        continue
+                
+                    if class_name not in metrics_data:
+                        metrics_data[class_name] = {"Classe": class_name}
+                        
+                    metrics_data[class_name][metric] = v
 
-        df_metrics = pd.DataFrame(list(metrics_data.values()))
+            df_metrics = pd.DataFrame(list(metrics_data.values()))
 
-        st.subheader("Performance par Classe")
-        if not df_metrics.empty:        
-            st.dataframe(
-                df_metrics, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Precision": st.column_config.NumberColumn(format="%.3f"),
-                    "Recall": st.column_config.NumberColumn(format="%.3f"),
-                    "F1-Score": st.column_config.NumberColumn(format="%.3f"),
-                }
-            )
-        else:
-            st.info("Aucune métrique par classe disponible pour ce run.")
-
-        # ### Configuration du Run MLflow
-        st.subheader("Configuration du Run MLflow")
-        items = list(parameters.items())
-        rows = []
-        for i in range(0, len(items), 2):
-            row = list(items[i])
-            if i + 1 < len(items):
-                row.extend(list(items[i+1]))
+            st.subheader("Performance par Classe")
+            if not df_metrics.empty:        
+                st.dataframe(
+                    df_metrics, 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Precision": st.column_config.NumberColumn(format="%.3f"),
+                        "Recall": st.column_config.NumberColumn(format="%.3f"),
+                        "F1-Score": st.column_config.NumberColumn(format="%.3f"),
+                    }
+                )
             else:
-                row.extend(["", ""])  # Gestion propre de l'élément impair (le 11ème)
-            rows.append(row)
+                st.info("Aucune métrique par classe disponible pour ce run.")
 
-        df_5x4 = pd.DataFrame(rows, columns=["Paramètre", "Valeur", "Paramètre ", "Valeur "])
-        st.dataframe(df_5x4, use_container_width=True, hide_index=True)
-
-    else:
-        st.error("Erreur : Impossible de récupérer les listes de paramètres et des métrics")
-        st.stop()
-
-
-# ------------------------------------------------------------------------------
-# 2 · Distributions & Relations
-# ------------------------------------------------------------------------------
-
-with tab_inference:
-
-    st.markdown(f"#### Run ID de l'entraînement : {run_id}")
-
-    if num_features or cat_features:
-
-        user_inputs = {}
-
-        with st.form("prediction_form"):
-            st.subheader("Variables Numériques")
-            if num_features:
-                # On découpe les features numériques par blocs de 3
-                for i in range(0, len(num_features), 3):
-                    cols = st.columns(3)
-                    batch = num_features[i:i+3]
-                    for j, feature in enumerate(batch):
-                        with cols[j]:
-                            user_inputs[feature] = st.number_input(label=feature, value=0.0)
-                            
-            st.subheader("Variables Catégorielles")
-            if cat_features:
-                # On découpe les features catégorielles par blocs de 3
-                for i in range(0, len(cat_features), 3):
-                    cols = st.columns(3)
-                    batch = cat_features[i:i+3]
-                    for j, feature in enumerate(batch):
-                        with cols[j]:
-                            user_inputs[feature] = st.text_input(label=feature, value="")
-                            
-            submitted = st.form_submit_button("Lancer la prédiction")
-
-        # Appel de l'API et traitement de la réponse ---
-        if submitted:
-
-            # URL de votre service FastAPI (en interne sur le réseau Docker, ou http://localhost:8000 si test en local hors Docker)
-            api_url = f"http://api:8000/predict/{selected_run_id}"
-
-            # Construction du payload attendu par la classe Pydantic (PredictionRequest)
-            payload = {
-                "features": user_inputs
-            }
-
-            try:
-                # On envoie tout dans un seul dictionnaire global sous la clé "features"
-                response = requests.post(api_url,json=payload)
-                
-                # Vérification du code de statut HTTP
-                if response.status_code == 200:
-                    # Récupération du dictionnaire JSON renvoyé par l'API
-                    result = response.json()
-
-                    # Affichage propre des résultats reçus
-                    st.success("Prédiction effectuée avec succès !")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric(label="Prédiction finale", value=result["prediction"])
-                    with col2:
-                        st.info(f"Modèle utilisé : `{result['model_used'][:8]}...`\n\nPCA active : `{result['pca_used']}`")
-                    
-                    with st.expander("Voir les sorties brutes du modèle (raw_output)"):
-                        st.json(result["raw_output"])        
-                            
+            # ### Configuration du Run MLflow
+            st.subheader("Configuration du Run MLflow")
+            items = list(parameters.items())
+            rows = []
+            for i in range(0, len(items), 2):
+                row = list(items[i])
+                if i + 1 < len(items):
+                    row.extend(list(items[i+1]))
                 else:
-                    # Affichage de l'erreur renvoyée par FastAPI (ex: 404 si run_id inconnu, 400 si erreur de shape)
-                    st.error(f"Erreur API ({response.status_code}) : {response.json().get('detail', response.text)}")
-                    
-            except requests.exceptions.ConnectionError:
-                st.error("Impossible de joindre le service FastAPI (`http://api:8000`). Vérifiez que le conteneur `api` est bien démarré.")         
+                    row.extend(["", ""])  # Gestion propre de l'élément impair (le 11ème)
+                rows.append(row)
 
-    else:
-        st.error("Erreur : Impossible de récupérer les listes de features pour ce run (listes vides ou introuvables).")
-        st.stop()
+            df_5x4 = pd.DataFrame(rows, columns=["Paramètre", "Valeur", "Paramètre ", "Valeur "])
+            st.dataframe(df_5x4, use_container_width=True, hide_index=True)
+
+        else:
+            st.error("Erreur : Impossible de récupérer les listes de paramètres et des métrics")
+            st.stop()
+
+
+    # ------------------------------------------------------------------------------
+    # 2 · Distributions & Relations
+    # ------------------------------------------------------------------------------
+
+    with tab_inference:
+
+        st.markdown(f"#### Run ID de l'entraînement : {run_id}")
+
+        if num_features or cat_features:
+
+            user_inputs = {}
+
+            with st.form("prediction_form"):
+                st.subheader("Variables Numériques")
+                if num_features:
+                    # On découpe les features numériques par blocs de 3
+                    for i in range(0, len(num_features), 3):
+                        cols = st.columns(3)
+                        batch = num_features[i:i+3]
+                        for j, feature in enumerate(batch):
+                            with cols[j]:
+                                user_inputs[feature] = st.number_input(label=feature, value=0.0)
+                                
+                st.subheader("Variables Catégorielles")
+                if cat_features:
+                    # On découpe les features catégorielles par blocs de 3
+                    for i in range(0, len(cat_features), 3):
+                        cols = st.columns(3)
+                        batch = cat_features[i:i+3]
+                        for j, feature in enumerate(batch):
+                            with cols[j]:
+                                user_inputs[feature] = st.text_input(label=feature, value="")
+                                
+                submitted = st.form_submit_button("Lancer la prédiction")
+
+            # Appel de l'API et traitement de la réponse ---
+            if submitted:
+
+                # URL de votre service FastAPI (en interne sur le réseau Docker, ou http://localhost:8000 si test en local hors Docker)
+                api_url = f"http://api:8000/predict/{selected_run_id}"
+
+                # Construction du payload attendu par la classe Pydantic (PredictionRequest)
+                payload = {
+                    "features": user_inputs
+                }
+
+                try:
+                    # On envoie tout dans un seul dictionnaire global sous la clé "features"
+                    response = requests.post(api_url,json=payload)
+                    
+                    # Vérification du code de statut HTTP
+                    if response.status_code == 200:
+                        # Récupération du dictionnaire JSON renvoyé par l'API
+                        result = response.json()
+
+                        # Affichage propre des résultats reçus
+                        st.success("Prédiction effectuée avec succès !")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric(label="Prédiction finale", value=result["prediction"])
+                        with col2:
+                            st.info(f"Modèle utilisé : `{result['model_used'][:8]}...`\n\nPCA active : `{result['pca_used']}`")
+                        
+                        with st.expander("Voir les sorties brutes du modèle (raw_output)"):
+                            st.json(result["raw_output"])        
+                                
+                    else:
+                        # Affichage de l'erreur renvoyée par FastAPI (ex: 404 si run_id inconnu, 400 si erreur de shape)
+                        st.error(f"Erreur API ({response.status_code}) : {response.json().get('detail', response.text)}")
+                        
+                except requests.exceptions.ConnectionError:
+                    st.error("Impossible de joindre le service FastAPI (`http://api:8000`). Vérifiez que le conteneur `api` est bien démarré.")         
+
+        else:
+            st.error("Erreur : Impossible de récupérer les listes de features pour ce run (listes vides ou introuvables).")
+            st.stop()
+
+else:
+    st.error("Aucun run trouvé dans MLflow.")
