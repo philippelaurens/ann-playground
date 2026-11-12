@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict, List, Tuple
 from ucimlrepo import fetch_ucirepo
+from sklearn.preprocessing import LabelEncoder
 
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
@@ -121,29 +122,7 @@ def load_prepared_datasets(
     df_train = pd.read_parquet(train_path) if train_path.exists() else None
     df_test = pd.read_parquet(test_path) if test_path.exists() else None
 
-    # Chargement du ColumnTransformer
-    transformer_path = out_path / "column_transformer.pkl"
-    transformer = joblib.load(transformer_path) if transformer_path.exists() else None
-
-    # Chargement conditionnel du modèle PCA
-    pca_path = out_path / "pca_model.pkl"
-    pca = joblib.load(pca_path) if use_pca and pca_path.exists() else None
-
-    # Chargement des listes de features (avec gestion du None si absentes)
-    num_features_path = out_path / "num_features.json"
-    cat_features_path = out_path / "cat_features.json"
-
-    num_features = None
-    if num_features_path.exists():
-        with open(num_features_path, "r", encoding="utf-8") as f:
-            num_features = json.load(f)
-
-    cat_features = None
-    if cat_features_path.exists():
-        with open(cat_features_path, "r", encoding="utf-8") as f:
-            cat_features = json.load(f)
-
-    return df_train, df_test, transformer, pca, num_features, cat_features
+    return df_train, df_test
 
 
 def export_train_test_parquet(
@@ -154,6 +133,8 @@ def export_train_test_parquet(
     num_features: list[str] | None = None,
     cat_features: list[str] | None = None,
     transformer: ColumnTransformer | None = None,
+    label_enc: LabelEncoder | None = None,
+    df_samples: pd.DataFrame | None = None,
     output_dir: Path | str = "data/processed_data",
     target_name: str = "target",
     transform_y: str | None = None,
@@ -204,13 +185,16 @@ def export_train_test_parquet(
     X_tr[target_name] = y_tr_vals
     X_te[target_name] = y_te_vals
 
-    # Chemins de sortie
+    # Export au format Parquet
     train_path = out_path / "train_prepared.parquet"
     test_path = out_path / "test_prepared.parquet"
-
-    # Export au format Parquet
     X_tr.to_parquet(train_path, index=False)
     X_te.to_parquet(test_path, index=False)
+
+    # Sauvegarde des échantillons de test par classe (si fournis)
+    samples_path = out_path / "df_samples.parquet"
+    if df_samples is not None and not df_samples.empty:
+        df_samples.to_parquet(samples_path, index=False)
 
     # Sauvegarde automatique des métadonnées et du transformateur dans le même répertoire
     if num_features is not None:
@@ -221,8 +205,13 @@ def export_train_test_parquet(
         with open(out_path / "cat_features.json", "w", encoding="utf-8") as f:
             json.dump(cat_features, f, ensure_ascii=False, indent=4)
 
+
     if transformer is not None:
         joblib.dump(transformer, out_path / "column_transformer.pkl")
+
+    # Sauvegarde du LabelEncoder fitté (avec joblib car c'est un objet scikit-learn)
+    if label_enc is not None:
+        joblib.dump(label_enc, out_path / "label_encoder.pkl")
 
     config_state = {
         "use_pca": False

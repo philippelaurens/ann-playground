@@ -1,5 +1,6 @@
 import os
 import json
+import pandas as pd
 import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -171,6 +172,16 @@ def log_keras_training(
         if transformer_path.exists():
             mlflow.log_artifact(str(transformer_path), artifact_path="preprocessing")
 
+        # Log du LabelEncoder
+        label_encoder_path = out_path / "label_encoder.pkl"
+        if label_encoder_path.exists():
+            mlflow.log_artifact(str(label_encoder_path), artifact_path="preprocessing")
+
+        # Log des Samples de test
+        samples_path = out_path / "df_samples.parquet"
+        if samples_path.exists():
+            mlflow.log_artifact(samples_path, artifact_path="preprocessing")
+
         # Log du fichier de configuration global
         if config_path.exists():
             mlflow.log_artifact(str(config_path), artifact_path="config")
@@ -259,6 +270,16 @@ def log_numpy_training(
         transformer_path = out_path / "column_transformer.pkl"
         if transformer_path.exists():
             mlflow.log_artifact(str(transformer_path), artifact_path="preprocessing")
+
+        # Log du LabelEncoder
+        label_encoder_path = out_path / "label_encoder.pkl"
+        if label_encoder_path.exists():
+            mlflow.log_artifact(str(label_encoder_path), artifact_path="preprocessing")
+
+        # Log des Samples de test
+        samples_path = out_path / "df_samples.parquet"
+        if samples_path.exists():
+            mlflow.log_artifact(samples_path, artifact_path="preprocessing")
 
         if config_path.exists():
             mlflow.log_artifact(str(config_path), artifact_path="config")

@@ -62,7 +62,7 @@ except Exception as err:
 # UI Setup and Sidebar
 # ---------------------------------------------------------------------------
 
-df_train, df_test, transformer, pca, num_features, cat_features = cached_load_prepared_datasets()
+df_train, df_test = cached_load_prepared_datasets()
 
 st.title("ANN Playground : ANN Lab")
 
@@ -120,7 +120,6 @@ if df_train is None or df_test is None:
     )
     st.info("Exécutez `1_data_studio.py` pour partitionner et prétraiter les données.")
     st.stop()
-
 
 X_train = df_train.drop(columns=["Target"]).values.astype(np.float32)
 y_train = df_train["Target"].values.astype(np.int64)

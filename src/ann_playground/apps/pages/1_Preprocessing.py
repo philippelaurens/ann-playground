@@ -422,6 +422,21 @@ with tab_prep:
             stratify=strat_target,
         )
 
+        # Regroupement temporaire pour piocher facilement par classe
+        # Extraction d'exactement 1 ligne par classe présente dans le test set
+        # DataFrame final d'exemples de test prêts pour l'inférence
+        df_test_combined = X_test_raw.copy()
+        df_test_combined[target_name] = y_test_raw
+
+        unique_classes = y_test_raw.unique()
+        sample_rows = []
+
+        for cls in unique_classes:
+            row_sample = df_test_combined[df_test_combined[target_name] == cls].iloc[[0]]
+            sample_rows.append(row_sample)
+
+        df_samples = pd.concat(sample_rows).reset_index(drop=True)
+
         # Encodage de la target
         label_enc = LabelEncoder()
         y_train = label_enc.fit_transform(y_train_raw.astype(str))
@@ -453,6 +468,8 @@ with tab_prep:
             num_features=num_features,
             cat_features=cat_features,
             transformer=transformer,
+            label_enc=label_enc,
+            df_samples=df_samples,
             output_dir=PROCESSED_DATA_DIR,
             target_name=target_name,
         )
@@ -525,7 +542,7 @@ with tab_pca:
     
     else:
 
-        X_train, X_test, transformer, pca, num_features, cat_features  = cached_load_prepared_datasets()
+        X_train, X_test  = cached_load_prepared_datasets()
 
         X_train_prep = X_train.drop(columns=[target_name]).values.astype(np.float32)
         y_train = X_train[target_name].values.astype(np.int64)
