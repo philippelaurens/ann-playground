@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 
 from mlflow.tracking import MlflowClient
 
-from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR
+from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME
 
 from ann_playground.data.data_utils import (
     load_source_data,
@@ -56,8 +56,13 @@ st.set_page_config(
 def fetch_available_runs():
     try:
         # Récupération des derniers runs de l'expérience active (par date décroissante)
-        runs_df = mlflow.search_runs(order_by=["start_time DESC"], max_results=10)
+        runs_df = mlflow.search_runs(
+            experiment_names=[EXPERIMENT_NAME],
+            order_by=["start_time DESC"], 
+            max_results=10
+        )
         if runs_df.empty:
+            st.markdown("ok")
             return {}
         
         # On crée un dictionnaire { "Nom_du_run (ID_court)" : run_id }
