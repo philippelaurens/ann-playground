@@ -46,7 +46,7 @@ NUM_FEATURES = [
 ]
 
 CAT_FEATURES = [
-    "Marital status",
+    "Marital Status",
     "Application mode",
     "Application order",
     "Course",
@@ -68,7 +68,7 @@ CAT_FEATURES = [
     "Curricular units 2nd sem (without evaluations)"
 ]
 
-EXPECTED_FEATURES = [*NUM_FEATURES, *CAT_FEATURES]
+EXPECTED_FEATURES = NUM_FEATURES + CAT_FEATURES
 
 
 # Avec class PredictionRequest(BaseModel), Pydantic intercepte le JSON envoyé par Streamlit, 
@@ -90,9 +90,12 @@ def load_run_artifacts(run_id: str):
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
     mlflow.set_tracking_uri(tracking_uri)
 
+    logger.info("----- Inside load_run_artifacts -----")
+
     try:
         # Téléchargement des artéfacts du run
         local_dir = mlflow.artifacts.download_artifacts(run_id=run_id)
+
         
         # Config du pipeline
         with open(os.path.join(local_dir, "config/pipeline_config.json"), "r") as f:
@@ -101,19 +104,24 @@ def load_run_artifacts(run_id: str):
         # Column Transformer
         column_transformer = joblib.load(os.path.join(local_dir, "preprocessing/column_transformer.pkl"))
         
+        # Column Transformer
+        label_encoder = joblib.load(os.path.join(local_dir, "preprocessing/label_encoder.pkl"))
+        
         # PCA optionnelle
         pca_model = None
-        if pipeline_config.get("use_pca", False):
+        if pipeline_config.get("use_pca", True):
             pca_model = joblib.load(os.path.join(local_dir, "preprocessing/pca_model.pkl"))
             
         # Modèle Keras
         model = mlflow.keras.load_model(f"runs:/{run_id}/model")
-        
+
+
         # Mise en cache
         model_cache[run_id] = model
         preprocessing_cache[run_id] = {
             "column_transformer": column_transformer,
             "pca_model": pca_model,
+            "label_encoder": label_encoder,
             "config": pipeline_config
         }
         
@@ -125,15 +133,17 @@ def load_run_artifacts(run_id: str):
 
 @app.post("/predict/{run_id}")
 def predict_with_run(run_id: str, payload: PredictionRequest):
-    logger.info("----- Requête reçue sur l'endpoint racine '/predict' -----")
     model, artifacts = load_run_artifacts(run_id)
 
     col_transformer = artifacts["column_transformer"]
     pca_model = artifacts["pca_model"]
-    expected_features = artifacts["expected_features"]
+    label_encoder = artifacts["label_encoder"]
+
+    expected_features = EXPECTED_FEATURES
     
     try:
         received_data = payload.features
+        logger.info(f"----- received_data ----- {received_data}")
         
         # Vérification dynamique des colonnes manquantes
         missing_cols = [col for col in expected_features if col not in received_data]
@@ -143,7 +153,7 @@ def predict_with_run(run_id: str, payload: PredictionRequest):
                 detail=f"Colonnes manquantes pour ce run : {missing_cols}"
             )
             
-        # Construction du DataFrame en filtrant et ordonnant exactement selon les besoins de ce run spécifique
+        # Construction du DataFrame en filtrant et ordonnant selon les besoins du run
         X_raw = pd.DataFrame([received_data])[expected_features]
         
         # Application du ColumnTransformer du run
@@ -158,10 +168,32 @@ def predict_with_run(run_id: str, payload: PredictionRequest):
         #  pour chaque classe (par exemple : [0.05, 0.15, 0.80]).
         #  np.argmax(preds[0]) scanne le tableau des probabilités et récupère l'indice de la valeur la plus haute.
         preds = model.predict(X_transformed)
-        pred_value = float(preds[0][0]) if preds.shape[1] == 1 else float(np.argmax(preds[0]))
         
+        # Récupération de l'indice ayant la probabilité maximale (0, 1 ou 2)
+        pred_idx = int(np.argmax(preds[0]))
+        pred_proba = float(np.max(preds[0]))
+
+        # Décodage et association des probabilités via le LabelEncoder
+        if label_encoder is not None:
+            # Traduction de l'indice (ex: 2) en libellé textuel (ex: "Graduate")
+            pred_label = str(label_encoder.inverse_transform([pred_idx])[0])
+            
+            # Dictionnaire associant chaque vrai nom de classe à sa probabilité prédite
+            class_names = label_encoder.classes_ # ["Dropout", "Enrolled", "Graduate"]
+            probs_per_class = {
+                str(class_names[i]): float(prob) 
+                for i, prob in enumerate(preds[0])
+            }
+        else:
+            pred_label = str(pred_idx)
+            probs_per_class = {f"Class_{i}": float(prob) for i, prob in enumerate(preds[0])}
+
+        # Retour de la réponse JSON structurée pour Streamlit
         return {
-            "prediction": pred_value,
+            "prediction_index": pred_idx,
+            "prediction_label": pred_label,
+            "confidence": pred_proba,
+            "probabilities_per_class": probs_per_class,
             "raw_output": preds[0].tolist(),
             "model_used": run_id,
             "features_used_count": len(expected_features),

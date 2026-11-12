@@ -127,6 +127,18 @@ def load_feature_lists_for_run(run_id):
     return num_features, cat_features, matrix_confusion_content
 
 
+@st.cache_data
+def load_sample_artifacts(run_id):
+    try:
+        # Télécharge le fichier df_samples.parquet depuis les artéfacts du run
+        local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="preprocessing/df_samples.parquet")
+        df_samples = pd.read_parquet(local_path)
+        return df_samples
+    except Exception as e:
+        # Si le fichier n'existe pas encore dans les vieux runs
+        return None
+
+
 # ==============================================================================
 # Barre latérale : Source de données & Target
 # ==============================================================================
@@ -267,39 +279,129 @@ if selected_run_id is not None:
     # 2 · Distributions & Relations
     # ------------------------------------------------------------------------------
 
+    # Liste officielle de vos 16 features attendues
+    NUM_FEATURES = [
+        "Previous qualification (grade)",
+        "Admission grade",
+        "Age at enrollment",
+        "Curricular units 1st sem (credited)",
+        "Curricular units 1st sem (enrolled)",
+        "Curricular units 1st sem (evaluations)",
+        "Curricular units 1st sem (approved)",
+        "Curricular units 1st sem (grade)",
+        "Curricular units 2nd sem (credited)",
+        "Curricular units 2nd sem (enrolled)",
+        "Curricular units 2nd sem (evaluations)",
+        "Curricular units 2nd sem (approved)",
+        "Curricular units 2nd sem (grade)",
+        "Unemployment rate",
+        "Inflation rate",
+        "GDP"
+    ]
+
+    CAT_FEATURES = [
+        "Marital Status",
+        "Application mode",
+        "Application order",
+        "Course",
+        "Daytime/evening attendance",
+        "Previous qualification",
+        "Nacionality",
+        "Mother's qualification",
+        "Father's qualification",
+        "Mother's occupation",
+        "Father's occupation",
+        "Displaced",
+        "Educational special needs",
+        "Debtor",
+        "Tuition fees up to date",
+        "Gender",
+        "Scholarship holder",
+        "International",
+        "Curricular units 1st sem (without evaluations)",
+        "Curricular units 2nd sem (without evaluations)"
+    ]
+
+    expected_features = NUM_FEATURES + CAT_FEATURES
+
     with tab_inference:
 
         st.markdown(f"#### Run ID de l'entraînement : {run_id}")
+
+        # Récupération des samples pour le run actif
+        df_samples = load_sample_artifacts(run_id)
 
         if num_features or cat_features:
 
             user_inputs = {}
 
-            with st.form("prediction_form"):
-                st.subheader("Variables Numériques")
-                if num_features:
-                    # On découpe les features numériques par blocs de 3
-                    for i in range(0, len(num_features), 3):
-                        cols = st.columns(3)
-                        batch = num_features[i:i+3]
-                        for j, feature in enumerate(batch):
-                            with cols[j]:
-                                user_inputs[feature] = st.number_input(label=feature, value=0.0)
-                                
-                st.subheader("Variables Catégorielles")
-                if cat_features:
-                    # On découpe les features catégorielles par blocs de 3
-                    for i in range(0, len(cat_features), 3):
-                        cols = st.columns(3)
-                        batch = cat_features[i:i+3]
-                        for j, feature in enumerate(batch):
-                            with cols[j]:
-                                user_inputs[feature] = st.text_input(label=feature, value="")
-                                
-                submitted = st.form_submit_button("Lancer la prédiction")
+            # Gestion de l'état dans session_state
+            if "prediction_result" not in st.session_state:
+                st.session_state.prediction_result = None
+            if "form_submitted" not in st.session_state:
+                st.session_state.form_submitted = False  
+
+            # Initialisation des valeurs par défaut dans le session_state si besoin
+            if "form_values" not in st.session_state:
+                st.session_state.form_values = {}
+
+            # Si des échantillons existent pour ce run, on propose un sélecteur rapide
+            if df_samples is not None and not df_samples.empty:
+                st.markdown("### ⚡ Remplissage rapide par échantillon")
+                sample_cols = st.columns(len(df_samples))
+                
+                for idx, row in df_samples.iterrows():
+                    # On essaie d'identifier le nom de la classe ou un libellé parlant
+                    # Cherche dynamiquement le nom de la colonne cible (adapte la liste selon ton dataset)
+                    target_col = next((c for c in ["Target", "target", "class", "label", "status"] if c in row), None)
+                    if target_col:
+                        label_name = str(row[target_col])
+                    else:
+                        label_name = f"Exemple {idx + 1}"
+                    with sample_cols[idx]:
+                        if st.button(f"Charger : {label_name}", key=f"btn_sample_{idx}"):
+                            # On injecte chaque valeur de la ligne dans le session_state
+                            for col in expected_features:
+                                if col in row:
+                                    st.session_state.form_values[col] = row[col]
+                            st.rerun()
+
+                st.markdown("---")        
+
+            with st.expander(
+                "📝 Paramètres d'entrée (Modifier les variables)", 
+                expanded=not st.session_state.form_submitted
+            ):
+                with st.form("prediction_form"):
+                    st.subheader("Variables Numériques")
+                    if num_features:
+                        # On découpe les features numériques par blocs de 3
+                        for i in range(0, len(num_features), 3):
+                            cols = st.columns(3)
+                            batch = num_features[i:i+3]
+                            for j, feature in enumerate(batch):
+                                with cols[j]:
+                                    default_val = float(st.session_state.form_values.get(feature, 0.0))
+                                    # user_inputs[feature] = st.number_input(label=feature, value=0.0)
+                                    user_inputs[feature] = st.number_input(label=feature, value=default_val)
+                                    
+                    st.subheader("Variables Catégorielles")
+                    if cat_features:
+                        # On découpe les features catégorielles par blocs de 3
+                        for i in range(0, len(cat_features), 3):
+                            cols = st.columns(3)
+                            batch = cat_features[i:i+3]
+                            for j, feature in enumerate(batch):
+                                with cols[j]:
+                                    default_val = str(st.session_state.form_values.get(feature, ""))
+                                    # user_inputs[feature] = st.text_input(label=feature, value="")
+                                    user_inputs[feature] = st.text_input(label=feature, value=default_val)
+                                    
+                    submitted = st.form_submit_button("Lancer la prédiction")
 
             # Appel de l'API et traitement de la réponse ---
             if submitted:
+                st.session_state.form_submitted = True
 
                 # URL de votre service FastAPI (en interne sur le réseau Docker, ou http://localhost:8000 si test en local hors Docker)
                 api_url = f"http://api:8000/predict/{selected_run_id}"
@@ -315,27 +417,51 @@ if selected_run_id is not None:
                     
                     # Vérification du code de statut HTTP
                     if response.status_code == 200:
-                        # Récupération du dictionnaire JSON renvoyé par l'API
-                        result = response.json()
-
-                        # Affichage propre des résultats reçus
-                        st.success("Prédiction effectuée avec succès !")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric(label="Prédiction finale", value=result["prediction"])
-                        with col2:
-                            st.info(f"Modèle utilisé : `{result['model_used'][:8]}...`\n\nPCA active : `{result['pca_used']}`")
-                        
-                        with st.expander("Voir les sorties brutes du modèle (raw_output)"):
-                            st.json(result["raw_output"])        
-                                
+                        st.session_state.prediction_result = response.json()
                     else:
-                        # Affichage de l'erreur renvoyée par FastAPI (ex: 404 si run_id inconnu, 400 si erreur de shape)
-                        st.error(f"Erreur API ({response.status_code}) : {response.json().get('detail', response.text)}")
-                        
-                except requests.exceptions.ConnectionError:
-                    st.error("Impossible de joindre le service FastAPI (`http://api:8000`). Vérifiez que le conteneur `api` est bien démarré.")         
+                        try:
+                            error_msg = response.json().get("detail", response.text)
+                        except Exception:
+                            error_msg = response.text if response.text else "Réponse vide"
+                        st.error(f"Erreur API ({response.status_code}) : {error_msg}")
+                        st.session_state.prediction_result = None
+
+                except Exception as e:
+                    st.error(f"Impossible de joindre l'API : {e}")
+                    st.session_state.prediction_result = None
+                
+                # Force le rechargement pour replier l'expander instantanément
+                st.rerun()
+
+            # Affichage des résultats (si disponibles)
+            if st.session_state.prediction_result is not None:
+                result = st.session_state.prediction_result
+                
+                st.success("Prédiction effectuée avec succès !")
+                
+                # Bouton pour ré-ouvrir le formulaire si l'utilisateur veut modifier un paramètre
+                if st.button("🔄 Modifier les valeurs d'entrée"):
+                    st.session_state.form_submitted = False
+                    st.session_state.prediction_result = None
+                    st.rerun()
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(label="Classe Prédite", value=result["prediction_label"], delta=f"Indice : {result['prediction_index']}")
+                with col2:
+                    st.metric(label="Confiance", value=f"{result['confidence'] * 100:.1f}%")
+                with col3:
+                    st.info(f"**Modèle :** `{result['model_used'][:8]}...`\n\n**PCA :** `{result['pca_used']}`")
+
+                # Graphique des probabilités
+                st.subheader("Répartition des probabilités")
+                probs_dict = result["probabilities_per_class"]
+                if probs_dict:
+                    df_probs = pd.DataFrame(list(probs_dict.items()), columns=["Classe", "Probabilité"]).set_index("Classe")
+                    st.bar_chart(df_probs)
+
+                with st.expander("Voir la charge utile brute (JSON)"):
+                    st.json(result)
 
         else:
             st.error("Erreur : Impossible de récupérer les listes de features pour ce run (listes vides ou introuvables).")
