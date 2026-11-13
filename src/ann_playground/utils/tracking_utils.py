@@ -198,7 +198,7 @@ def log_keras_training(
 
         # Log des métriques de test, de la matrice de confusion et du modèle Keras
         metrics_to_log = get_metrics_to_log(report_dict)
-        
+
         mlflow.log_metrics(metrics_test)
         mlflow.log_figure(fig_cm, "confusion_matrix.html")
         mlflow.log_metrics(metrics_to_log)

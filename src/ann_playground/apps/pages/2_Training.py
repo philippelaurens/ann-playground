@@ -33,6 +33,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+from ann_playground.services.mlflow_utils import (
+    fetch_available_runs
+)
+
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
@@ -217,6 +221,7 @@ with tab_train:
             metrics_summary = {
                 "test_loss": float(test_loss),
                 "test_accuracy": float(test_acc),
+                "best_epoch": int(pd.DataFrame(history.history)["val_loss"].idxmin()) + 1
             }
 
             log_keras_training(

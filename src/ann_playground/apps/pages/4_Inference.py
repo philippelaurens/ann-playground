@@ -6,8 +6,6 @@ import json
 import os
 import streamlit.components.v1 as components
 
-from mlflow.tracking import MlflowClient
-
 from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME
 
 from ann_playground.data.data_utils import (
@@ -31,6 +29,13 @@ from ann_playground.data.data_visualisation import (
     scree_plot_with_ideal_components,
 )
 
+from ann_playground.services.mlflow_utils import (
+    fetch_available_runs,
+    load_parameters_lists_for_run,
+    load_feature_lists_for_run,
+    load_sample_artifacts
+)
+
 # ---------------------------------------------------------------------------
 # Authentification
 # ---------------------------------------------------------------------------
@@ -52,93 +57,6 @@ st.set_page_config(
 )
 
 
-@st.cache_data(ttl=60)
-def fetch_available_runs():
-    try:
-        # Récupération des derniers runs de l'expérience active (par date décroissante)
-        runs_df = mlflow.search_runs(
-            experiment_names=[EXPERIMENT_NAME],
-            order_by=["start_time DESC"], 
-            max_results=10
-        )
-        if runs_df.empty:
-            st.markdown("ok")
-            return {}
-        
-        # On crée un dictionnaire { "Nom_du_run (ID_court)" : run_id }
-        runs_dict = {}
-        for _, row in runs_df.iterrows():
-            run_id = row["run_id"]
-            run_name = row.get("tags.mlflow.runName", run_id[:8])
-            display_label = f"{run_name} ({run_id[:8]}...)"
-            runs_dict[display_label] = run_id
-            
-        return runs_dict
-    except Exception as e:
-        st.sidebar.error(f"Erreur de connexion MLflow : {e}")
-        return {}
-
-
-def load_parameters_lists_for_run(run_id):
-
-    # Initialisation du client (pointe par exemple sur votre serveur MLflow ou le dossier local mlruns)
-    client = MlflowClient()
-
-    # Récupérer les métadonnées globales du run (statut, date, etc.)
-    run = client.get_run(run_id)
-    parameters = run.data.params
-    metrics = run.data.metrics
-
-    return parameters, metrics
-
-
-def load_feature_lists_for_run(run_id):
-    # Valeurs par défaut au cas où les fichiers manquent
-    num_features = []
-    cat_features = []
-    matrix_confusion_content = None
-
-    try:
-        # Télécharger les artéfacts enregistrés
-        local_dir = mlflow.artifacts.download_artifacts(run_id=run_id)
-
-        # Chemin du fichier num_features.json
-        num_path = os.path.join(local_dir, "preprocessing", "num_features.json")
-        if os.path.exists(num_path):
-            with open(num_path, "r", encoding="utf-8") as f:
-                num_features = json.load(f)
-
-        # Chemin du fichier cat_features.json
-        cat_path = os.path.join(local_dir, "preprocessing", "cat_features.json")
-        if os.path.exists(cat_path):
-            with open(cat_path, "r", encoding="utf-8") as f:
-                cat_features = json.load(f)
-
-        # Chemin du fichier confusion_matrix.html
-        html_path = os.path.join(local_dir, "confusion_matrix.html")
-        if os.path.exists(html_path):
-            with open(html_path, "r", encoding="utf-8") as f:
-                matrix_confusion_content = f.read()
-
-    except Exception as e:
-        # Optionnel : loguer l'erreur ou l'afficher dans Streamlit si besoin
-        print(f"Erreur lors du chargement des artéfacts pour le run {run_id}: {e}")
-
-    return num_features, cat_features, matrix_confusion_content
-
-
-@st.cache_data
-def load_sample_artifacts(run_id):
-    try:
-        # Télécharge le fichier df_samples.parquet depuis les artéfacts du run
-        local_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="preprocessing/df_samples.parquet")
-        df_samples = pd.read_parquet(local_path)
-        return df_samples
-    except Exception as e:
-        # Si le fichier n'existe pas encore dans les vieux runs
-        return None
-
-
 # ==============================================================================
 # Barre latérale : Source de données & Target
 # ==============================================================================
@@ -150,8 +68,12 @@ with st.sidebar:
         st.caption("Page d'inférence")
 
     # Chargement des runs disponibles
-    runs_dict = fetch_available_runs()
-
+    try:
+        runs_dict = fetch_available_runs()
+    except Exception as e:
+        st.sidebar.error(f"Erreur de connexion MLflow : {e}")
+        st.stop()
+        
     if runs_dict:
         # Affichage du select dans la sidebar
         selected_label = st.sidebar.selectbox(
