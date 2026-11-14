@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+import logging
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -15,31 +16,30 @@ from ann_playground.model.numpy_mlp import NumpyMLP
 from ann_playground.data.data_utils import (
     load_prepared_datasets,
 )
-
 from ann_playground.data.data_visualisation import (
     plot_learning_curves,
 )
-
 from ann_playground.utils.tracking_utils import (
     init_mlflow_experiment,
     log_keras_training,
     log_numpy_training,
 )
-
-st.set_page_config(
-    page_title="ANN Playground · ANN Lab",
-    page_icon="🔬",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
 from ann_playground.services.mlflow_utils import (
     fetch_available_runs
 )
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True
+)
+
+
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
+
 
 # ---------------------------------------------------------------------------
 # Authentification
@@ -66,9 +66,16 @@ except Exception as err:
 # UI Setup and Sidebar
 # ---------------------------------------------------------------------------
 
-df_train, df_test = cached_load_prepared_datasets()
+st.set_page_config(
+    page_title="ANN Playground · ANN Lab",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 st.title("ANN Playground : ANN Lab")
+
+df_train, df_test = cached_load_prepared_datasets()
 
 with st.sidebar:
     with st.empty().container():    
@@ -320,7 +327,7 @@ with tab_train:
                         ),
                         height=400,
                     )
-                    chart_spot.plotly_chart(fig, use_container_width=True)
+                    chart_spot.plotly_chart(fig, width='stretch')
 
             test_loss, test_acc = np_model.evaluate(X_test, y_test_oh)
             y_pred = np_model.predict(X_test)
@@ -405,7 +412,7 @@ with tab_train:
             ),
             height=400,
         )
-        chart_spot.plotly_chart(fig, use_container_width=True)
+        chart_spot.plotly_chart(fig, width='stretch')
 
 # ------------------------------------------------------------------------------
 # 2 · Évaluation
@@ -427,7 +434,7 @@ with tab_eval:
                 y_test, y_pred, target_names=class_labels, output_dict=True
             )
             df_report = pd.DataFrame(report_dict).transpose().round(3)
-            st.dataframe(df_report, use_container_width=True)
+            st.dataframe(df_report, width='stretch')
 
         with col_mat:
             st.markdown("##### Matrice de confusion")
@@ -441,7 +448,7 @@ with tab_eval:
                 labels=dict(x="Prédit", y="Réel", color="Nombre"),
             )
             fig_cm.update_layout(height=380, margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig_cm, use_container_width=True)
+            st.plotly_chart(fig_cm, width='stretch')
 
     if "history_obj" in st.session_state and not st.session_state["history_obj"].empty:
         st.subheader("Courbes d'apprentissage")

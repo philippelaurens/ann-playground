@@ -2,6 +2,7 @@ import os
 import json
 import ast
 import mlflow
+import joblib
 import pandas as pd
 
 from collections import defaultdict
@@ -113,6 +114,22 @@ def load_sample_artifacts(run_id):
         return None
 
 
+def load_label_encoder(run_id: str):
+    """Charge le LabelEncoder d'un run MLflow, ou None s'il est absent."""
+    try:
+        local_path = mlflow.artifacts.download_artifacts(
+            run_id=run_id,
+            artifact_path="preprocessing/label_encoder.pkl",
+        )
+    except Exception:
+        return None
+
+    # Une erreur de chargement (version sklearn, fichier corrompu) ne doit pas être masquée
+    label_encoder = joblib.load(local_path)
+    return label_encoder
+
+
+
 def build_structured_runs_table(max_results=None):
     """
     Interroge MLflow et retourne un dictionnaire imbriqué sous la forme :
@@ -145,7 +162,6 @@ def build_structured_runs_table(max_results=None):
 
         layers_list = ast.literal_eval(hidden_layers)
         num_layers = len(layers_list)
-        activation_str = f"{activation} ({num_layers})"
         
         # 2. Extraction des métriques pour affichage / tri ultérieur
         acc = row.get("metrics.accuracy", None)
@@ -164,8 +180,10 @@ def build_structured_runs_table(max_results=None):
 
         # Gestion de la PCA (oui avec n_components, ou non)
         n_components = row.get("params.n_components", row.get("params.pca_n_components", None))
+        num_str = str(int(num_features_count)) if not pd.isna(num_features_count) else "?"
+        cat_str = str(int(cat_features_count)) if not pd.isna(cat_features_count) else "?"
         pca_status = f"oui ({n_components})" if n_components is not None and pd.notna(n_components) else "non"
-        pca_status += f" / {num_features_count}-{cat_features_count}"
+        pca_status += f" / {num_str}-{cat_str}"
 
         val_accuracy = row.get("metrics.val_accuracy", None)
         val_loss = row.get("metrics.val_loss", None)
@@ -183,7 +201,8 @@ def build_structured_runs_table(max_results=None):
         run_info = {
             "run_id": run_id,
             "run_name": run_name,
-            "activation": activation_str,
+            "activation": activation,
+            "layers": num_layers,
             "learning_rate": float(lr) if lr is not None and pd.notna(lr) else None,
             "dropout_rate": float(dropout) if dropout is not None and pd.notna(dropout) else None,
             "batch_norm": batch_norm,

@@ -1,39 +1,28 @@
 import streamlit as st
 import pandas as pd
 import requests
+import logging
 import mlflow
 import json
+import re
 import os
 import streamlit.components.v1 as components
 
 from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME
 
-from ann_playground.data.data_utils import (
-    load_source_data,
-    export_train_test_parquet,
-    load_prepared_datasets,
-    export_pca_parquet,
-)
-from ann_playground.utils.preprocessing_utils import (
-    count_duplicates,
-    missing_summary,
-    special_columns,
-    classify_feature_types,
-    correlated_features,
-    drop_redundant_features,
-    target_correlations,
-    preprocess_data,
-)
-from ann_playground.data.data_visualisation import (
-    plot_pca_cumulative_variance,
-    scree_plot_with_ideal_components,
-)
-
 from ann_playground.services.mlflow_utils import (
     fetch_available_runs,
     load_parameters_lists_for_run,
     load_feature_lists_for_run,
-    load_sample_artifacts
+    load_sample_artifacts,
+    load_label_encoder
+)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True
 )
 
 # ---------------------------------------------------------------------------
@@ -114,8 +103,9 @@ if selected_run_id is not None:
     # 1 · Diagnostic structurel
     # ------------------------------------------------------------------------------
 
-    parameters, metrics = load_parameters_lists_for_run(run_id)
+    parameters, metrics = load_parameters_lists_for_run(selected_run_id)
     num_features, cat_features, matrix_confusion_content = load_feature_lists_for_run(selected_run_id)
+    label_encoder = load_label_encoder(selected_run_id)
 
     with tab_run:
 
@@ -129,10 +119,10 @@ if selected_run_id is not None:
             d2.metric("loss", f"{metrics['loss'] * 100:.2f} %")
             d3.metric("val_accuracy", f"{metrics['val_accuracy'] * 100:.2f} %")
             d4.metric("val_loss", f"{metrics['val_loss'] * 100:.2f} %")
-            d6.metric("test_accuracy", f"{metrics['test_accuracy'] * 100:.2f} %")
-            d5.metric("test_loss", f"{metrics['test_loss'] * 100:.2f} %")
+            d5.metric("Learning Rate", parameters['learning_rate'])
+            d6.metric("Dropout Rate", parameters['dropout_rate'])
 
-            components.html(matrix_confusion_content, height=550, scrolling=True)
+            st.iframe(matrix_confusion_content, height=550)
 
             # ### Performance par Classe
             metrics_data = {}
@@ -140,20 +130,33 @@ if selected_run_id is not None:
                 if k.startswith("class_"):
                     # On enlève "class_" et on sépare au dernier underscore pour isoler la métrique (precision, recall, f1_score)
                     body = k[6:]
-                    class_name, metric = body.rsplit("_", 1)
+                    class_raw, metric = body.rsplit("_", 1)
                     
                     # Identification de la métrique par son suffixe exact
                     if body.endswith("_precision"):
-                        class_name = body[:-10]
+                        class_raw = body[:-10]
                         metric = "Precision"
                     elif body.endswith("_recall"):
-                        class_name = body[:-7]
+                        class_raw = body[:-7]
                         metric = "Recall"
                     elif body.endswith("_f1_score"):
-                        class_name = body[:-9]
+                        class_raw = body[:-9]
                         metric = "F1-Score"
                     else:
                         continue
+
+                    if label_encoder is not None:
+                        match = re.search(r'\d+', str(class_raw))
+                        if match:
+                            class_idx = int(match.group())
+                            if 0 <= class_idx < len(label_encoder.classes_):
+                                class_name = str(label_encoder.classes_[class_idx])
+                            else:
+                                logger.warning(f"Index {class_idx} hors limites pour '{class_raw}'")
+                                class_name = str(class_raw)
+                        else:
+                            # Pas de chiffre : c'est déjà un libellé
+                            class_name = str(class_raw)
                 
                     if class_name not in metrics_data:
                         metrics_data[class_name] = {"Classe": class_name}
@@ -166,7 +169,7 @@ if selected_run_id is not None:
             if not df_metrics.empty:        
                 st.dataframe(
                     df_metrics, 
-                    use_container_width=True, 
+                    width='stretch', 
                     hide_index=True,
                     column_config={
                         "Precision": st.column_config.NumberColumn(format="%.3f"),
@@ -190,7 +193,7 @@ if selected_run_id is not None:
                 rows.append(row)
 
             df_5x4 = pd.DataFrame(rows, columns=["Paramètre", "Valeur", "Paramètre ", "Valeur "])
-            st.dataframe(df_5x4, use_container_width=True, hide_index=True)
+            st.dataframe(df_5x4, width='stretch', hide_index=True)
 
         else:
             st.error("Erreur : Impossible de récupérer les listes de paramètres et des métrics")
@@ -242,9 +245,7 @@ if selected_run_id is not None:
                             for col in expected_features:
                                 if col in row:
                                     st.session_state.form_values[col] = row[col]
-                            st.rerun()
-
-                st.markdown("---")        
+                            st.rerun() 
 
             with st.expander(
                 "📝 Paramètres d'entrée (Modifier les variables)", 

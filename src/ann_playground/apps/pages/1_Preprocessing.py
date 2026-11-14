@@ -3,9 +3,11 @@ from typing import Any, Dict, List, Tuple
 import time
 import numpy as np
 import pandas as pd
+import logging
 import plotly.express as px
 import matplotlib.pyplot as plt
 import streamlit as st
+import logging
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
@@ -31,6 +33,13 @@ from ann_playground.utils.preprocessing_utils import (
 from ann_playground.data.data_visualisation import (
     plot_pca_cumulative_variance,
     scree_plot_with_ideal_components,
+)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True
 )
 
 # ---------------------------------------------------------------------------
@@ -175,10 +184,10 @@ with tab_audit:
     if cols_with_na.empty:
         st.success("Aucune valeur manquante détectée.")
     else:
-        st.dataframe(cols_with_na, use_container_width=True)
+        st.dataframe(cols_with_na, width='stretch')
 
     with st.expander("Aperçu des 10 premières lignes"):
-        st.dataframe(df_raw.head(10), use_container_width=True)
+        st.dataframe(df_raw.head(10), width='stretch')
 
 
 # ------------------------------------------------------------------------------
@@ -207,7 +216,7 @@ with tab_eda:
                 ),
                 color_discrete_sequence=px.colors.qualitative.Prism,
             )
-            st.plotly_chart(fig_dist, use_container_width=True)
+            st.plotly_chart(fig_dist, width='stretch')
         else:
             val_counts = df_raw[var_to_plot].astype(str).value_counts().reset_index()
             val_counts.columns = [var_to_plot, "Effectif"]
@@ -217,7 +226,7 @@ with tab_eda:
                 y="Effectif",
                 color_discrete_sequence=["#439cc8"],
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
 
     with c_right:
         st.markdown("##### Analyse de la variable cible")
@@ -236,8 +245,8 @@ with tab_eda:
                 hole=0.45,
                 color_discrete_sequence=px.colors.qualitative.Safe,
             )
-            st.plotly_chart(fig_target, use_container_width=True)
-            st.dataframe(target_dist, use_container_width=True)
+            st.plotly_chart(fig_target, width='stretch')
+            st.dataframe(target_dist, width='stretch')
         else:
             st.info(
                 "Définissez une cible dans la barre latérale pour activer la répartition."
@@ -274,7 +283,7 @@ with tab_filter:
             )
             st.dataframe(
                 df_pairs.style.format({"Corrélation": "{:.3f}"}),
-                use_container_width=True,
+                width='stretch',
             )
         else:
             st.success("Aucune paire de variables ne dépasse ce seuil.")
@@ -296,7 +305,7 @@ with tab_filter:
                 df_raw.drop(columns=[target_name]), y_temp, n_top=12
             )
             st.dataframe(
-                corrs.to_frame("Corrélation absolue"), use_container_width=True
+                corrs.to_frame("Corrélation absolue"), width='stretch'
             )
 
             if st.button("Éliminer automatiquement les variables redondantes"):
@@ -327,7 +336,7 @@ with tab_filter:
             yaxis_title=""
         )
 
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_heat, width='stretch')
 
         st.markdown("---")
         st.subheader("📊 Interprétation de la matrice de corrélation")
@@ -486,7 +495,7 @@ with tab_prep:
             f"- Test set  : `{df_test_features.shape[0]}` lignes\n"
             f"- Classes cibles : {dict(enumerate(label_enc.classes_))}"
         )
-        st.dataframe(df_train_features.head(5), use_container_width=True)
+        st.dataframe(df_train_features.head(5), width='stretch')
 
         st.session_state["export_ready"] = True
         st.session_state["button_ready"] = True

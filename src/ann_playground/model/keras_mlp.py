@@ -108,7 +108,7 @@ class StreamlitEpochCallback(keras.callbacks.Callback):
                 height=400,
                 margin=dict(l=20, r=20, t=50, b=20),
             )
-            self.chart_placeholder.plotly_chart(fig, use_container_width=True)
+            self.chart_placeholder.plotly_chart(fig, width='stretch')
 
 
 def build_keras_mlp(
