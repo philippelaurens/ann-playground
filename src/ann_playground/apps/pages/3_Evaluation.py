@@ -194,9 +194,9 @@ with tab_diag:
                     with col2:
                         st.metric("Val Loss", f"{metrics['val_loss']:.4f}" if metrics['val_loss'] is not None else "N/A")
                     with col3:
-                        st.metric("Learning Rate", parameters['learning_rate'])
+                        st.metric("Test Accuracy", f"{metrics['test_accuracy']:.4f}" if metrics['test_accuracy'] is not None else "N/A")
                     with col4:
-                        st.metric("Dropout Rate", parameters['dropout_rate'])
+                        st.metric("Test Loss", f"{metrics['test_loss']:.4f}" if metrics['test_loss'] is not None else "N/A")
                     
                     metrics_data = {}
                     for k, v in metrics.items():
@@ -224,6 +224,7 @@ with tab_diag:
                                     class_idx = int(match.group())
                                     if 0 <= class_idx < len(label_encoder.classes_):
                                         class_name = str(label_encoder.classes_[class_idx])
+                                        class_name += f" (Classe {class_idx})"
                                     else:
                                         logger.warning(f"Index {class_idx} hors limites pour '{class_raw}'")
                                         class_name = str(class_raw)
@@ -253,7 +254,20 @@ with tab_diag:
                         )
 
                     st.iframe(matrix_confusion_content, height=550)
-        
+
+                    items = list(parameters.items())
+                    rows = []
+                    for i in range(0, len(items), 2):
+                        row = list(items[i])
+                        if i + 1 < len(items):
+                            row.extend(list(items[i+1]))
+                        else:
+                            row.extend(["", ""])  # Gestion propre de l'élément impair (le 11ème)
+                        rows.append(row)
+
+                    df_5x4 = pd.DataFrame(rows, columns=["Paramètre", "Valeur", "Paramètre ", "Valeur "])
+                    st.dataframe(df_5x4, width='stretch', hide_index=True)
+                
     elif show_matching and not matching_runs:
         st.warning("Aucun run ne correspond à cette combinaison exacte.")
     else:

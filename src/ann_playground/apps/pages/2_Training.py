@@ -72,7 +72,7 @@ st.set_page_config(
 st.title("ANN Playground : ANN Lab")
 
 try:
-    df_train, df_test = load_prepared_datasets()
+    df_train, df_val, df_test = load_prepared_datasets()
 except FileNotFoundError as e:
     st.error(e)
     st.stop()
@@ -125,7 +125,7 @@ with st.sidebar:
 # Structure principale en onglets
 # ==============================================================================
 
-if df_train is None or df_test is None:
+if df_train is None and df_val is None and df_test is None:
     st.warning(
         "Aucune matrice de données n'a été détectée dans `data/processed_data/`."
     )
@@ -134,7 +134,8 @@ if df_train is None or df_test is None:
 
 X_train = df_train.drop(columns=["Target"]).values.astype(np.float32)
 y_train = df_train["Target"].values.astype(np.int64)
-
+X_val = df_val.drop(columns=["Target"]).values.astype(np.float32)
+y_val = df_val["Target"].values.astype(np.int64)
 X_test = df_test.drop(columns=["Target"]).values.astype(np.float32)
 y_test = df_test["Target"].values.astype(np.int64)
 
@@ -147,7 +148,7 @@ c1, c2, c3, c4 = st.columns(4)
 c1.metric("Features en entrée", n_features)
 c2.metric("Classes cibles", n_classes)
 c3.metric("Échantillons Train", len(X_train))
-c4.metric("Échantillons Test", len(X_test))
+c4.metric("Échantillons Val", len(X_val))
 
 tab_train, tab_eval, tab_diagnose = st.tabs(
     [
@@ -191,18 +192,18 @@ with tab_train:
             history = model.fit(
                 X_train,
                 y_train,
-                validation_data=(X_test, y_test),
+                validation_data=(X_val, y_val),
                 epochs=epochs,
                 batch_size=batch_size,
                 callbacks=[cb],
                 verbose=0,
             )
 
-            y_pred = np.argmax(model.predict(X_test), axis=1)
+            y_pred = np.argmax(model.predict(X_val), axis=1)
             test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
 
             class_labels = [f"Classe {c}" for c in sorted(np.unique(y_test))]
-            cm = confusion_matrix(y_test, y_pred)
+            cm = confusion_matrix(y_val, y_pred)
             fig_cm = px.imshow(
                 cm,
                 text_auto=True,
@@ -212,7 +213,7 @@ with tab_train:
                 title=f"Confusion Matrix - Keras ({activation_fn})",
             )
             report_dict = classification_report(
-                y_test, y_pred, target_names=class_labels, output_dict=True
+                y_val, y_pred, target_names=class_labels, output_dict=True
             )
 
             run_params = {
@@ -250,6 +251,7 @@ with tab_train:
 
         else:
             y_train_oh = np.eye(n_classes)[y_train]
+            y_val_oh = np.eye(n_classes)[y_val]
             y_test_oh = np.eye(n_classes)[y_test]
 
             np_model = NumpyMLP(
@@ -268,7 +270,7 @@ with tab_train:
                     np_model.train_step(xb, yb, lr=learning_rate)
 
                 train_loss, train_acc = np_model.evaluate(X_train, y_train_oh)
-                val_loss, val_acc = np_model.evaluate(X_test, y_test_oh)
+                val_loss, val_acc = np_model.evaluate(X_val, y_val_oh)
 
                 records.append(
                     {
@@ -329,11 +331,11 @@ with tab_train:
                     )
                     chart_spot.plotly_chart(fig, width='stretch')
 
-            test_loss, test_acc = np_model.evaluate(X_test, y_test_oh)
-            y_pred = np_model.predict(X_test)
+            test_loss, test_acc = np_model.evaluate(X_val, y_val_oh)
+            y_pred = np_model.predict(X_val)
 
             class_labels = [f"Classe {c}" for c in sorted(np.unique(y_test))]
-            cm = confusion_matrix(y_test, y_pred)
+            cm = confusion_matrix(y_val, y_pred)
             fig_cm = px.imshow(
                 cm,
                 text_auto=True,
@@ -343,7 +345,7 @@ with tab_train:
                 title=f"Confusion Matrix - NumPy ({activation_fn})",
             )
             report_dict = classification_report(
-                y_test, y_pred, target_names=class_labels, output_dict=True
+                y_val, y_pred, target_names=class_labels, output_dict=True
             )
 
             run_params = {
@@ -424,21 +426,21 @@ with tab_eval:
         st.info("Lancez un entraînement pour visualiser le rapport de classification.")
     else:
         y_pred = st.session_state["y_pred"]
-        class_labels = [f"Classe {c}" for c in sorted(np.unique(y_test))]
+        class_labels = [f"Classe {c}" for c in sorted(np.unique(y_val))]
 
         col_rep, col_mat = st.columns([1, 1])
 
         with col_rep:
             st.markdown("##### Rapport de classification")
             report_dict = classification_report(
-                y_test, y_pred, target_names=class_labels, output_dict=True
+                y_val, y_pred, target_names=class_labels, output_dict=True
             )
             df_report = pd.DataFrame(report_dict).transpose().round(3)
             st.dataframe(df_report, width='stretch')
 
         with col_mat:
             st.markdown("##### Matrice de confusion")
-            cm = confusion_matrix(y_test, y_pred)
+            cm = confusion_matrix(y_val, y_val)
             fig_cm = px.imshow(
                 cm,
                 text_auto=True,

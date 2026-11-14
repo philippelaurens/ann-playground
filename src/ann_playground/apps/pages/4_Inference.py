@@ -8,7 +8,7 @@ import json
 import re
 import streamlit.components.v1 as components
 
-from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME
+from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME, API_URI
 
 from ann_playground.services.mlflow_utils import (
     fetch_available_runs,
@@ -284,8 +284,8 @@ if selected_run_id is not None:
             if submitted:
                 st.session_state.form_submitted = True
 
-                # URL de votre service FastAPI (en interne sur le réseau Docker, ou http://localhost:8000 si test en local hors Docker)
-                api_url = f"http://api:8000/predict/{selected_run_id}"
+                # URL de du service FastAPI 
+                api_url = f"{API_URI}/predict/{selected_run_id}"
 
                 # Construction du payload attendu par la classe Pydantic (PredictionRequest)
                 payload = {

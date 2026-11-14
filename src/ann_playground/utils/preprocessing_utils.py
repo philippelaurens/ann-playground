@@ -327,6 +327,7 @@ def drop_redundant_features(
 
 def preprocess_data(
     X_train: pd.DataFrame,
+    X_val: pd.DataFrame,
     X_test: pd.DataFrame | None = None,
     numeric_columns: list[str] | None = None,
     categorical_columns: list[str] | None = None,
@@ -336,6 +337,7 @@ def preprocess_data(
 
     Args:
         X_train: Training feature DataFrame used to fit scalers and encoders.
+        X_val: Training feature DataFrame used to transform.
         X_test: Optional test feature DataFrame to transform.
         numeric_columns: Columns to scale. Auto-detected if None.
         categorical_columns: Categorical columns to one-hot encode. Auto-detected if None.
@@ -380,8 +382,11 @@ def preprocess_data(
     column_transformer = ColumnTransformer(transformers=transformers, remainder="drop")
 
     X_train_processed = column_transformer.fit_transform(X_train)
+    X_val_processed = (
+        column_transformer.transform(X_val) if X_val is not None else None
+    )
     X_test_processed = (
         column_transformer.transform(X_test) if X_test is not None else None
     )
 
-    return X_train_processed, X_test_processed, column_transformer
+    return X_train_processed, X_val_processed, X_test_processed, column_transformer

@@ -425,7 +425,7 @@ with tab_prep:
 
         strat_target = y_raw if use_stratify and y_raw.nunique() <= 20 else None
 
-        # 1. Découpage train/test AVANT toute transformation
+        # --- A. Isolation définitive du jeu de test (Coffre-fort) ---
         X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(
             X_df,
             y_raw,
@@ -449,14 +449,35 @@ with tab_prep:
 
         df_samples = pd.concat(sample_rows).reset_index(drop=True)
 
+        # --- B. Extraction du jeu de validation à partir du pool restant ---
+        # - Si test_ratio = 0.20, il reste 80% des données. Prendre 15% de ce reste 
+        #   laisse environ 68% du dataset total pour l'entraînement pur, ce qui est 
+        #   un excellent compromis pour alimenter la rétropropagation du réseau de neurones 
+        #   tout en conservant un jeu de validation assez large pour stabiliser la surveillance 
+        #   des époques (loss/accuracy) et l'early stopping.
+        val_ratio = 0.15
+
+        strat_target_val = y_train_raw if use_stratify and y_train_raw.nunique() <= 20 else None
+
+        X_train_raw, X_val_raw, y_train_raw, y_val_raw = train_test_split(
+            X_train_raw,
+            y_train_raw,
+            test_size=val_ratio,
+            random_state=int(random_seed),
+            stratify=strat_target_val,
+        )
+
+        # --- C. Preprocessing des DataFrames bruts ---
         # Encodage de la target
         label_enc = LabelEncoder()
         y_train = label_enc.fit_transform(y_train_raw.astype(str))
+        y_val = label_enc.transform(y_val_raw.astype(str))
         y_test = label_enc.transform(y_test_raw.astype(str))
 
         # Fit du ColumnTransformer uniquement sur X_train
-        X_train_proc, X_test_proc, transformer = preprocess_data(
+        X_train_proc, X_val_proc, X_test_proc, transformer = preprocess_data(
             X_train=X_train_raw,
+            X_val=X_val_raw,
             X_test=X_test_raw,
             numeric_columns=num_features,
             categorical_columns=cat_features,
@@ -469,13 +490,16 @@ with tab_prep:
             encoded_cols = [f"f_{i}" for i in range(X_train_proc.shape[1])]
 
         df_train_features = pd.DataFrame(X_train_proc, columns=encoded_cols)
+        df_val_features = pd.DataFrame(X_val_proc, columns=encoded_cols)
         df_test_features = pd.DataFrame(X_test_proc, columns=encoded_cols)
 
-        # Export unique au format Parquet
-        train_path, test_path = export_train_test_parquet(
+        # --- D. Export unique au format Parquet
+        train_path, val_path, test_path = export_train_test_parquet(
             X_train=df_train_features,
+            X_val=df_val_features,
             X_test=df_test_features,
             y_train=y_train,
+            y_val=y_val,
             y_test=y_test,
             num_features=num_features,
             cat_features=cat_features,
@@ -488,7 +512,8 @@ with tab_prep:
 
         df_train_ready = df_train_features.copy()
         df_train_ready[target_name] = y_train
-
+        df_val_ready = df_val_features.copy()
+        df_val_ready[target_name] = y_val
         df_test_ready = df_test_features.copy()
         df_test_ready[target_name] = y_test
 
@@ -554,13 +579,14 @@ with tab_pca:
     
     else:
 
-        X_train, X_test  = cached_load_prepared_datasets()
+        df_train, df_val, df_test  = cached_load_prepared_datasets()
 
-        X_train_prep = X_train.drop(columns=[target_name]).values.astype(np.float32)
-        y_train = X_train[target_name].values.astype(np.int64)
-
-        X_test_prep = X_test.drop(columns=[target_name]).values.astype(np.float32)
-        y_test = X_test[target_name].values.astype(np.int64)
+        X_train_prep = df_train.drop(columns=[target_name]).values.astype(np.float32)
+        y_train = df_train[target_name].values.astype(np.int64)
+        X_val_prep = df_val.drop(columns=[target_name]).values.astype(np.float32)
+        y_val = df_val[target_name].values.astype(np.int64)
+        X_test_prep = df_test.drop(columns=[target_name]).values.astype(np.float32)
+        y_test = df_test[target_name].values.astype(np.int64)
 
 
         st.subheader("Analyse en Composantes Principales (PCA)")
@@ -616,16 +642,19 @@ with tab_pca:
                 
                 pca_personnalise = PCA(n_components=n_components_choisi, random_state=42)
                 X_train_pca = pca_personnalise.fit_transform(X_train_prep)
+                X_val_pca = pca_personnalise.transform(X_val_prep)
                 X_test_pca = pca_personnalise.transform(X_test_prep)
 
                 # Export for inference
 
 
                 # Export to Parquet
-                train_file, test_file = export_pca_parquet(
+                train_file, val_file, test_file = export_pca_parquet(
                     X_train_pca=X_train_pca,
+                    X_val_pca=X_val_pca,
                     X_test_pca=X_test_pca,
                     y_train=y_train,
+                    y_val=y_val,
                     y_test=y_test,
                     pca=pca_personnalise,
                     output_dir=PROCESSED_DATA_DIR,
@@ -635,6 +664,7 @@ with tab_pca:
                 st.success(
                     f"✅ Matrices PCA exportées avec succès dans `{PROCESSED_DATA_DIR}`\n\n"
                     f"- **Train set (PCA)** : `{X_train_pca.shape[0]}` lignes, `{X_train_pca.shape[1]}` composantes principales\n"
+                    f"- **Val set (PCA)** : `{X_val_pca.shape[0]}` lignes, `{X_val_pca.shape[1]}` composantes principales\n"
                     f"- **Test set (PCA)** : `{X_test_pca.shape[0]}` lignes, `{X_test_pca.shape[1]}` composantes principales\n"
                     f"- **Cible (`{target_name}`)** : {len(np.unique(y_train))} classes uniques"
                 )  

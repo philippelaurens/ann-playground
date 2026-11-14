@@ -114,21 +114,26 @@ def load_prepared_datasets(
     use_pca = config.get("use_pca", False)
     if use_pca:
         train_path = out_path / "train_pca.parquet"
+        val_path = out_path / "val_pca.parquet"
         test_path = out_path / "test_pca.parquet"
     else:
         train_path = out_path / "train_prepared.parquet"
+        val_path = out_path / "val_prepared.parquet"
         test_path = out_path / "test_prepared.parquet"
 
     df_train = pd.read_parquet(train_path) if train_path.exists() else None
+    df_val = pd.read_parquet(val_path) if val_path.exists() else None
     df_test = pd.read_parquet(test_path) if test_path.exists() else None
 
-    return df_train, df_test
+    return df_train, df_val, df_test
 
 
 def export_train_test_parquet(
     X_train: pd.DataFrame,
+    X_val: pd.DataFrame,
     X_test: pd.DataFrame,
     y_train: pd.Series | np.ndarray,
+    y_val: pd.Series | np.ndarray,
     y_test: pd.Series | np.ndarray,
     num_features: list[str] | None = None,
     cat_features: list[str] | None = None,
@@ -139,7 +144,7 @@ def export_train_test_parquet(
     target_name: str = "target",
     transform_y: str | None = None,
     drop_cols: list[str] | None = None,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     """Export prepared training and test sets as compressed Parquet files, 
     along with preprocessing artifacts and feature lists.
 
@@ -165,30 +170,37 @@ def export_train_test_parquet(
 
     # Nettoyage des colonnes à exclure et réinitialisation des index
     X_tr = X_train.drop(columns=drop_cols or [], errors="ignore").reset_index(drop=True)
+    X_va = X_val.drop(columns=drop_cols or [], errors="ignore").reset_index(drop=True)
     X_te = X_test.drop(columns=drop_cols or [], errors="ignore").reset_index(drop=True)
 
     # Conversion en tableau 1D sécurisée (gère les Series pandas et les arrays 1D/2D numpy)
     y_tr_arr = (y_train.to_numpy() if isinstance(y_train, pd.Series) else np.asarray(y_train)).ravel()
+    y_va_arr = (y_val.to_numpy() if isinstance(y_val, pd.Series) else np.asarray(y_val)).ravel()
     y_te_arr = (y_test.to_numpy() if isinstance(y_test, pd.Series) else np.asarray(y_test)).ravel()
 
     # Application de la transformation cible avec validation
     if transform_y == "log1p":
         y_tr_vals = np.log1p(y_tr_arr)
+        y_va_vals = np.log1p(y_va_arr)
         y_te_vals = np.log1p(y_te_arr)
     elif transform_y is not None:
         raise ValueError(f"Transformée non supportée : '{transform_y}'. Utilisez 'log1p' ou None.")
     else:
         y_tr_vals = y_tr_arr
+        y_va_vals = y_va_arr
         y_te_vals = y_te_arr
 
     # Ajout de la cible dans les DataFrames
     X_tr[target_name] = y_tr_vals
+    X_va[target_name] = y_va_vals
     X_te[target_name] = y_te_vals
 
     # Export au format Parquet
     train_path = out_path / "train_prepared.parquet"
+    val_path = out_path / "val_prepared.parquet"
     test_path = out_path / "test_prepared.parquet"
     X_tr.to_parquet(train_path, index=False)
+    X_va.to_parquet(val_path, index=False)
     X_te.to_parquet(test_path, index=False)
 
     # Sauvegarde des échantillons de test par classe (si fournis)
@@ -219,13 +231,15 @@ def export_train_test_parquet(
     with open(out_path / "pipeline_config.json", "w", encoding="utf-8") as f:
         json.dump(config_state, f, ensure_ascii=False, indent=4)
 
-    return train_path, test_path
+    return train_path, val_path, test_path
 
 
 def export_pca_parquet(
     X_train_pca: np.ndarray,
+    X_val_pca: np.ndarray,
     X_test_pca: np.ndarray,
     y_train: pd.Series | np.ndarray,
+    y_val: pd.Series | np.ndarray,
     y_test: pd.Series | np.ndarray,
     pca: PCA | None = None,
     output_dir: Path | str = "data/processed_data",
@@ -262,23 +276,25 @@ def export_pca_parquet(
     """
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    train_path = out_path / "train_prepared.parquet"
-    train_path = out_path / "train_pca.parquet"
-    test_path = out_path / "test_prepared.parquet"   
+    train_path = out_path / "train_pca.parquet" 
+    val_path = out_path / "val_pca.parquet" 
     test_path = out_path / "test_pca.parquet"
 
     # Conversion des tableaux NumPy PCA en DataFrames pandas avec des noms de colonnes explicites
     cols = [f"PC_{i+1}" for i in range(X_train_pca.shape[1])]
     
     df_train_pca = pd.DataFrame(X_train_pca, columns=cols)
+    df_val_pca = pd.DataFrame(X_val_pca, columns=cols)
     df_test_pca = pd.DataFrame(X_test_pca, columns=cols)
 
     # Ajout de la variable cible
     df_train_pca[target_name] = y_train.values if hasattr(y_train, "values") else y_train
+    df_val_pca[target_name] = y_val.values if hasattr(y_val, "values") else y_val
     df_test_pca[target_name] = y_test.values if hasattr(y_test, "values") else y_test
 
     # Export au format Parquet
     df_train_pca.to_parquet(train_path, index=False)
+    df_val_pca.to_parquet(val_path, index=False)
     df_test_pca.to_parquet(test_path, index=False)
 
     # Sauvegarde de l'objet PCA dans le même répertoire
@@ -302,4 +318,4 @@ def export_pca_parquet(
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config_state, f, ensure_ascii=False, indent=4)
 
-    return train_path, test_path
+    return train_path, val_path, test_path
