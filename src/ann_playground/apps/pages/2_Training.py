@@ -331,7 +331,7 @@ with tab_train:
                     )
                     chart_spot.plotly_chart(fig, width='stretch')
 
-            test_loss, test_acc = np_model.evaluate(X_val, y_val_oh)
+            test_loss, test_acc = np_model.evaluate(X_test, y_test_oh)
             y_pred = np_model.predict(X_val)
 
             class_labels = [f"Classe {c}" for c in sorted(np.unique(y_test))]
