@@ -3,18 +3,85 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ann_playground_app
+    image: ann-playground:latest
     ports:
       - "8501:8501"
-      - "5000:5000"
     volumes:
-      # Monte le code source pour le rechargement à chaud
+      # Code source monté pour le rechargement à chaud
       - ./src:/app/src
       - ./models:/app/models
       - ./data:/app/data
-      # Isole le venv pour que le dossier .venv du conteneur (généré lors du build) ne soit pas écrasé par l'hôte
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+      # Préserve le .venv construit dans l'image
       - /app/.venv
     environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_AUTH_ADMIN_USERNAME}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mlflow:
+    image: ann-playground:latest
+    environment:
+      - MLFLOW_SERVER_ALLOWED_HOSTS=localhost:5000,127.0.0.1:5000,mlflow:5000,192.168.56.101:5000,${EXTERNAL_HOST}
+      - MLFLOW_ENABLE_SYSTEM_METRICS=true
+      - MLFLOW_AUTH_CONFIG_PATH=/app/mlflow-data/basic_auth.ini
+      - MLFLOW_FLASK_SERVER_SECRET_KEY=${MLFLOW_FLASK_SERVER_SECRET_KEY}
+      - MLFLOW_AUTH_ADMIN_USERNAME=${MLFLOW_AUTH_ADMIN_USERNAME}
+      - MLFLOW_AUTH_ADMIN_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}      
+    command: >
+      /app/.venv/bin/mlflow server
+      --app-name basic-auth
+      --backend-store-uri sqlite:////app/mlflow-data/mlflow.db
+      --artifacts-destination /app/mlartifacts
+      --serve-artifacts
+      --host 0.0.0.0
+      --port 5000
+      --cors-allowed-origins "*"
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      # Dossier (et non fichier) pour éviter que Docker crée un répertoire mlflow.db
+      - ./mlflow-data:/app/mlflow-data
+      - ./mlartifacts:/app/mlartifacts
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Votre Dockerfile existant à la racine
+    image: ann-playground:latest
+    container_name: ann-playground-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./main.py:/app/main.py  # Votre fichier FastAPI à la racine
+      - ./models:/app/models
+      - ./data:/app/data
+      - /app/.venv
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_AUTH_ADMIN_USERNAME}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_AUTH_ADMIN_PASSWORD}
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    command: >
+      /app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      mlflow:
+        condition: service_healthy
     restart: unless-stopped

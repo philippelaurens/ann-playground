@@ -3,9 +3,11 @@ from typing import Any, Dict, List, Tuple
 import time
 import numpy as np
 import pandas as pd
+import logging
 import plotly.express as px
 import matplotlib.pyplot as plt
 import streamlit as st
+import logging
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
@@ -33,13 +35,37 @@ from ann_playground.data.data_visualisation import (
     scree_plot_with_ideal_components,
 )
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True
+)
 
-@st.cache_data
+# ---------------------------------------------------------------------------
+# Authentification
+# ---------------------------------------------------------------------------
+
+# Vérification de sécurité obligatoire sur chaque sous-pages
+if not st.session_state.get("authenticated", False):
+    st.warning("⚠️ Veuillez vous connecter depuis la page d'accueil pour accéder à cette section.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Preprocessing
+# ---------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="ANN Playground · Data Studio",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
 def cached_load_source_data(file_path: Path | Any) -> pd.DataFrame:
     """Fonction wrapper mise en cache pour Streamlit qui appelle la logique de chargement."""
     return load_source_data(file_path)
 
-# @st.cache_data
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
@@ -49,44 +75,38 @@ def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame |
 # Barre latérale : Source de données & Target
 # ==============================================================================
 
+st.title("ANN Playground : Data Studio")
+
 with st.sidebar:
-    st.title("Data Studio")
-    st.caption("Module générique de préparation et diagnostic")
+    with st.empty().container():
+        st.caption("Module générique de préparation et diagnostic")
 
-    data_source_mode = st.radio(
-        "Source de données",
-       # ["Fichier du projet (config)", "Téléverser un fichier local"],
-       ["Fichier du projet (config)"],
-    )
+        data_source_mode = st.radio(
+            "Source de données",
+        # ["Fichier du projet (config)", "Téléverser un fichier local"],
+        ["Fichier du projet (config)"],
+        )
 
-    if data_source_mode == "Fichier du projet (config)":
-        if DATA.exists():
-            df_raw = cached_load_source_data(DATA)
-            st.success(f"Fichier chargé : `{DATA.name}`")
+        if data_source_mode == "Fichier du projet (config)":
+            if DATA.exists():
+                df_raw = cached_load_source_data(DATA)
+                st.success(f"Fichier chargé : `{DATA.name}`")
         else:
-            st.error(f"Fichier introuvable à l'emplacement : {DATA}")
-            st.stop()
-    else:
-        uploaded = st.file_uploader("Fichier tabulaire", type=["csv", "parquet"])
-        if uploaded is not None:
-            df_raw = cached_load_source_data(uploaded)
-            st.success(f"Fichier chargé : `{uploaded.name}`")
-        else:
-            st.info("Importez un fichier pour initialiser l'espace de travail.")
-            st.stop()
+            uploaded = st.file_uploader("Fichier tabulaire", type=["csv", "parquet"])
+            if uploaded is not None:
+                df_raw = cached_load_source_data(uploaded)
+                st.success(f"Fichier chargé : `{uploaded.name}`")
 
-    column_candidates = ["Aucune"] + list(df_raw.columns)
-    selected_target = st.selectbox(
-        "Variable cible (Target)", column_candidates, index=len(column_candidates) - 1
-    )
-    target_name = None if selected_target == "Aucune" else selected_target
+        column_candidates = ["Aucune"] + list(df_raw.columns)
+        selected_target = st.selectbox(
+            "Variable cible (Target)", column_candidates, index=len(column_candidates) - 1
+        )
+        target_name = None if selected_target == "Aucune" else selected_target
 
 
 # ==============================================================================
 # Structure principale en onglets
 # ==============================================================================
-
-st.set_page_config(layout="wide")
 
 # Injection CSS ciblant les data-testid stables de Streamlit
 st.markdown("""
@@ -164,10 +184,10 @@ with tab_audit:
     if cols_with_na.empty:
         st.success("Aucune valeur manquante détectée.")
     else:
-        st.dataframe(cols_with_na, use_container_width=True)
+        st.dataframe(cols_with_na, width='stretch')
 
     with st.expander("Aperçu des 10 premières lignes"):
-        st.dataframe(df_raw.head(10), use_container_width=True)
+        st.dataframe(df_raw.head(10), width='stretch')
 
 
 # ------------------------------------------------------------------------------
@@ -196,7 +216,7 @@ with tab_eda:
                 ),
                 color_discrete_sequence=px.colors.qualitative.Prism,
             )
-            st.plotly_chart(fig_dist, use_container_width=True)
+            st.plotly_chart(fig_dist, width='stretch')
         else:
             val_counts = df_raw[var_to_plot].astype(str).value_counts().reset_index()
             val_counts.columns = [var_to_plot, "Effectif"]
@@ -206,7 +226,7 @@ with tab_eda:
                 y="Effectif",
                 color_discrete_sequence=["#439cc8"],
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
 
     with c_right:
         st.markdown("##### Analyse de la variable cible")
@@ -225,8 +245,8 @@ with tab_eda:
                 hole=0.45,
                 color_discrete_sequence=px.colors.qualitative.Safe,
             )
-            st.plotly_chart(fig_target, use_container_width=True)
-            st.dataframe(target_dist, use_container_width=True)
+            st.plotly_chart(fig_target, width='stretch')
+            st.dataframe(target_dist, width='stretch')
         else:
             st.info(
                 "Définissez une cible dans la barre latérale pour activer la répartition."
@@ -263,7 +283,7 @@ with tab_filter:
             )
             st.dataframe(
                 df_pairs.style.format({"Corrélation": "{:.3f}"}),
-                use_container_width=True,
+                width='stretch',
             )
         else:
             st.success("Aucune paire de variables ne dépasse ce seuil.")
@@ -285,7 +305,7 @@ with tab_filter:
                 df_raw.drop(columns=[target_name]), y_temp, n_top=12
             )
             st.dataframe(
-                corrs.to_frame("Corrélation absolue"), use_container_width=True
+                corrs.to_frame("Corrélation absolue"), width='stretch'
             )
 
             if st.button("Éliminer automatiquement les variables redondantes"):
@@ -316,7 +336,7 @@ with tab_filter:
             yaxis_title=""
         )
 
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_heat, width='stretch')
 
         st.markdown("---")
         st.subheader("📊 Interprétation de la matrice de corrélation")
@@ -411,12 +431,27 @@ with tab_prep:
             stratify=strat_target,
         )
 
-        # 2. Encodage de la target
+        # Regroupement temporaire pour piocher facilement par classe
+        # Extraction d'exactement 1 ligne par classe présente dans le test set
+        # DataFrame final d'exemples de test prêts pour l'inférence
+        df_test_combined = X_test_raw.copy()
+        df_test_combined[target_name] = y_test_raw
+
+        unique_classes = y_test_raw.unique()
+        sample_rows = []
+
+        for cls in unique_classes:
+            row_sample = df_test_combined[df_test_combined[target_name] == cls].iloc[[0]]
+            sample_rows.append(row_sample)
+
+        df_samples = pd.concat(sample_rows).reset_index(drop=True)
+
+        # Encodage de la target
         label_enc = LabelEncoder()
         y_train = label_enc.fit_transform(y_train_raw.astype(str))
         y_test = label_enc.transform(y_test_raw.astype(str))
 
-        # # 3. Fit du ColumnTransformer uniquement sur X_train
+        # Fit du ColumnTransformer uniquement sur X_train
         X_train_proc, X_test_proc, transformer = preprocess_data(
             X_train=X_train_raw,
             X_test=X_test_raw,
@@ -424,7 +459,7 @@ with tab_prep:
             categorical_columns=cat_features,
         )
 
-        # 4. Récupération des noms de colonnes transformées
+        # Récupération des noms de colonnes transformées
         if hasattr(transformer, "get_feature_names_out"):
             encoded_cols = [str(c) for c in transformer.get_feature_names_out()]
         else:
@@ -433,12 +468,17 @@ with tab_prep:
         df_train_features = pd.DataFrame(X_train_proc, columns=encoded_cols)
         df_test_features = pd.DataFrame(X_test_proc, columns=encoded_cols)
 
-        # # 5. Export unique au format Parquet
+        # Export unique au format Parquet
         train_path, test_path = export_train_test_parquet(
             X_train=df_train_features,
             X_test=df_test_features,
             y_train=y_train,
             y_test=y_test,
+            num_features=num_features,
+            cat_features=cat_features,
+            transformer=transformer,
+            label_enc=label_enc,
+            df_samples=df_samples,
             output_dir=PROCESSED_DATA_DIR,
             target_name=target_name,
         )
@@ -455,7 +495,7 @@ with tab_prep:
             f"- Test set  : `{df_test_features.shape[0]}` lignes\n"
             f"- Classes cibles : {dict(enumerate(label_enc.classes_))}"
         )
-        st.dataframe(df_train_features.head(5), use_container_width=True)
+        st.dataframe(df_train_features.head(5), width='stretch')
 
         st.session_state["export_ready"] = True
         st.session_state["button_ready"] = True
@@ -511,7 +551,7 @@ with tab_pca:
     
     else:
 
-        X_train, X_test = cached_load_prepared_datasets()
+        X_train, X_test  = cached_load_prepared_datasets()
 
         X_train_prep = X_train.drop(columns=[target_name]).values.astype(np.float32)
         y_train = X_train[target_name].values.astype(np.int64)
@@ -575,11 +615,16 @@ with tab_pca:
                 X_train_pca = pca_personnalise.fit_transform(X_train_prep)
                 X_test_pca = pca_personnalise.transform(X_test_prep)
 
+                # Export for inference
+
+
+                # Export to Parquet
                 train_file, test_file = export_pca_parquet(
                     X_train_pca=X_train_pca,
                     X_test_pca=X_test_pca,
                     y_train=y_train,
                     y_test=y_test,
+                    pca=pca_personnalise,
                     output_dir=PROCESSED_DATA_DIR,
                     target_name=target_name
                 )

@@ -279,9 +279,9 @@ def drop_redundant_features(
         target_series = (
             y_or_target.copy()
             if isinstance(y_or_target, pd.Series)
-            else pd.Series(y_or_target, index=df_full.index, name="target")
+            else pd.Series(y_or_target, index=df_full.index, name="Target")
         )
-        target_col = target_series.name or "target"
+        target_col = target_series.name or "Target"
         df_full[target_col] = target_series.values
 
     # 1. Matrice de corrélation absolue entre features numériques
@@ -314,7 +314,7 @@ def drop_redundant_features(
     dropped_list = sorted(to_drop)
     reduced_df = features_df.drop(columns=dropped_list, errors="ignore")
 
-    if isinstance(y_or_target, str):
+    if target_col in df_full.columns:
         reduced_df[target_col] = df_full[target_col]
 
     return reduced_df, dropped_list

@@ -1,12 +1,15 @@
+import json
+import joblib
 from pathlib import Path
 import numpy as np
 import pandas as pd
 from typing import Any, Dict, List, Tuple
 from ucimlrepo import fetch_ucirepo
+from sklearn.preprocessing import LabelEncoder
 
-from pathlib import Path
-import numpy as np
-import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+
 
 from ann_playground.config import PROCESSED_DATA_DIR
 
@@ -72,15 +75,54 @@ def load_source_data(file_path: Path | Any) -> pd.DataFrame:
     return df
 
 
-def load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Load train and test Parquet matrices from processed data directory."""
-    train_file = PROCESSED_DATA_DIR / "train_prepared.parquet"
-    test_file = PROCESSED_DATA_DIR / "test_prepared.parquet"
+def load_prepared_datasets(
+    output_dir: Path | str = PROCESSED_DATA_DIR
+) -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    ColumnTransformer | None,
+    PCA | None,
+    list[str] | None,
+    list[str] | None
+]:
+    """Charge automatiquement les jeux de données (standard ou PCA), 
+    les artefacts de preprocessing et les listes de features associées.
 
-    if not train_file.exists() or not test_file.exists():
-        return None, None
+    Returns:
+        Tuple contenant :
+            - df_train (pd.DataFrame | None)
+            - df_test (pd.DataFrame | None)
+            - transformer (ColumnTransformer | None)
+            - pca (PCA | None)
+            - num_features (list[str] | None)
+            - cat_features (list[str] | None)
+    """
+    out_path = Path(output_dir)
+    config_path = out_path / "pipeline_config.json"
 
-    return pd.read_parquet(train_file), pd.read_parquet(test_file)
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"Aucun fichier de configuration trouvé dans '{out_path}'. "
+            "Veuillez exécuter le preprocessing ou la PCA au préalable."
+        )
+
+    # Lecture de l'état du pipeline
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    
+    # Chargement conditionnel des fichiers Parquet
+    use_pca = config.get("use_pca", False)
+    if use_pca:
+        train_path = out_path / "train_pca.parquet"
+        test_path = out_path / "test_pca.parquet"
+    else:
+        train_path = out_path / "train_prepared.parquet"
+        test_path = out_path / "test_prepared.parquet"
+
+    df_train = pd.read_parquet(train_path) if train_path.exists() else None
+    df_test = pd.read_parquet(test_path) if test_path.exists() else None
+
+    return df_train, df_test
 
 
 def export_train_test_parquet(
@@ -88,22 +130,28 @@ def export_train_test_parquet(
     X_test: pd.DataFrame,
     y_train: pd.Series | np.ndarray,
     y_test: pd.Series | np.ndarray,
+    num_features: list[str] | None = None,
+    cat_features: list[str] | None = None,
+    transformer: ColumnTransformer | None = None,
+    label_enc: LabelEncoder | None = None,
+    df_samples: pd.DataFrame | None = None,
     output_dir: Path | str = "data/processed_data",
     target_name: str = "target",
     transform_y: str | None = None,
     drop_cols: list[str] | None = None,
 ) -> tuple[Path, Path]:
-    """Export prepared training and test sets as compressed Parquet files.
-
-    Concatenates features and target into single tables matching the structure
-    expected by ANN Lab ('train_prepared.parquet' and 'test_prepared.parquet').
+    """Export prepared training and test sets as compressed Parquet files, 
+    along with preprocessing artifacts and feature lists.
 
     Args:
         X_train: Training features DataFrame.
         X_test: Test features DataFrame.
         y_train: Training target labels or continuous values.
         y_test: Test target labels or continuous values.
-        output_dir: Directory where artifacts will be saved.
+        num_features: List of numerical column names.
+        cat_features: List of categorical column names.
+        transformer: Fitted ColumnTransformer instance.
+        output_dir: Directory where artifacts and parquet files will be saved.
         target_name: Column name assigned to the target variable.
         transform_y: Optional transform ('log1p' supported).
         drop_cols: Columns to exclude from the export.
@@ -111,6 +159,7 @@ def export_train_test_parquet(
     Returns:
         Tuple of (train_filepath, test_filepath).
     """
+    
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -136,13 +185,39 @@ def export_train_test_parquet(
     X_tr[target_name] = y_tr_vals
     X_te[target_name] = y_te_vals
 
-    # Chemins de sortie
+    # Export au format Parquet
     train_path = out_path / "train_prepared.parquet"
     test_path = out_path / "test_prepared.parquet"
-
-    # Export au format Parquet
     X_tr.to_parquet(train_path, index=False)
     X_te.to_parquet(test_path, index=False)
+
+    # Sauvegarde des échantillons de test par classe (si fournis)
+    samples_path = out_path / "df_samples.parquet"
+    if df_samples is not None and not df_samples.empty:
+        df_samples.to_parquet(samples_path, index=False)
+
+    # Sauvegarde automatique des métadonnées et du transformateur dans le même répertoire
+    if num_features is not None:
+        with open(out_path / "num_features.json", "w", encoding="utf-8") as f:
+            json.dump(num_features, f, ensure_ascii=False, indent=4)
+
+    if cat_features is not None:
+        with open(out_path / "cat_features.json", "w", encoding="utf-8") as f:
+            json.dump(cat_features, f, ensure_ascii=False, indent=4)
+
+
+    if transformer is not None:
+        joblib.dump(transformer, out_path / "column_transformer.pkl")
+
+    # Sauvegarde du LabelEncoder fitté (avec joblib car c'est un objet scikit-learn)
+    if label_enc is not None:
+        joblib.dump(label_enc, out_path / "label_encoder.pkl")
+
+    config_state = {
+        "use_pca": False
+    }
+    with open(out_path / "pipeline_config.json", "w", encoding="utf-8") as f:
+        json.dump(config_state, f, ensure_ascii=False, indent=4)
 
     return train_path, test_path
 
@@ -152,6 +227,7 @@ def export_pca_parquet(
     X_test_pca: np.ndarray,
     y_train: pd.Series | np.ndarray,
     y_test: pd.Series | np.ndarray,
+    pca: PCA | None = None,
     output_dir: Path | str = "data/processed_data",
     target_name: str = "Target",
 ) -> tuple[Path, Path]:
@@ -187,7 +263,9 @@ def export_pca_parquet(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     train_path = out_path / "train_prepared.parquet"
+    train_path = out_path / "train_pca.parquet"
     test_path = out_path / "test_prepared.parquet"   
+    test_path = out_path / "test_pca.parquet"
 
     # Conversion des tableaux NumPy PCA en DataFrames pandas avec des noms de colonnes explicites
     cols = [f"PC_{i+1}" for i in range(X_train_pca.shape[1])]
@@ -195,12 +273,33 @@ def export_pca_parquet(
     df_train_pca = pd.DataFrame(X_train_pca, columns=cols)
     df_test_pca = pd.DataFrame(X_test_pca, columns=cols)
 
-    # 2. Ajout de la variable cible
+    # Ajout de la variable cible
     df_train_pca[target_name] = y_train.values if hasattr(y_train, "values") else y_train
     df_test_pca[target_name] = y_test.values if hasattr(y_test, "values") else y_test
 
-    # 3. Export au format Parquet
+    # Export au format Parquet
     df_train_pca.to_parquet(train_path, index=False)
     df_test_pca.to_parquet(test_path, index=False)
+
+    # Sauvegarde de l'objet PCA dans le même répertoire
+    if pca is not None:
+        joblib.dump(pca, out_path / "pca_model.pkl")
+
+    # Mise à jour intelligente du fichier de configuration (bascule use_pca à True)
+    config_path = out_path / "pipeline_config.json"
+
+    config_state = {}
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_state = json.load(f)
+
+    # On met à jour uniquement les champs relatifs à la PCA
+    config_state.update({
+        "use_pca": True,
+        "n_components": X_train_pca.shape[1]
+    })
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config_state, f, ensure_ascii=False, indent=4)
 
     return train_path, test_path

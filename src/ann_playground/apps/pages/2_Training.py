@@ -2,85 +2,127 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+import logging
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 
-from ann_playground.config import PROCESSED_DATA_DIR
+from ann_playground.config import PROCESSED_DATA_DIR, EXPERIMENT_NAME
 from ann_playground.model.keras_mlp import StreamlitEpochCallback, build_keras_mlp
 from ann_playground.model.numpy_mlp import NumpyMLP
 
 from ann_playground.data.data_utils import (
     load_prepared_datasets,
 )
-
 from ann_playground.data.data_visualisation import (
     plot_learning_curves,
 )
+from ann_playground.utils.tracking_utils import (
+    init_mlflow_experiment,
+    log_keras_training,
+    log_numpy_training,
+)
+from ann_playground.services.mlflow_utils import (
+    fetch_available_runs
+)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True
+)
 
 
-experiment_id = "0"
-
-# @st.cache_data
 def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load train and test Parquet matrices from processed data directory."""
     return load_prepared_datasets()
-    
 
-# ==============================================================================
+
+# ---------------------------------------------------------------------------
+# Authentification
+# ---------------------------------------------------------------------------
+
+# Vérification de sécurité obligatoire sur chaque sous-pages
+if not st.session_state.get("authenticated", False):
+    st.warning("⚠️ Veuillez vous connecter depuis la page d'accueil pour accéder à cette section.")
+    st.stop()
+
+
+# ---------------------------------------------------------------------------
+# Start MLFlow
+# ---------------------------------------------------------------------------
+
+try:
+    experiment_id = init_mlflow_experiment(EXPERIMENT_NAME)
+except Exception as err:
+    st.warning(f"MLflow service connection unavailable: {err}. Runs will attempt reconnect on launch.")
+    experiment_id = "0"
+
+
+# ---------------------------------------------------------------------------
 # UI Setup and Sidebar
-# ==============================================================================
+# ---------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="ANN Playground · ANN Lab",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.title("ANN Playground : ANN Lab")
 
 df_train, df_test = cached_load_prepared_datasets()
 
 with st.sidebar:
-    st.title("ANN Lab")
-    st.caption("Conception et évaluation de topologies MLP")
+    with st.empty().container():    
+        st.caption("Conception et évaluation de topologies MLP")
 
-    engine = st.selectbox("Moteur de calcul", ["Keras (TensorFlow)", "NumPy MLP (POO)"])
+        engine = st.selectbox("Moteur de calcul", ["Keras (TensorFlow)", "NumPy MLP (POO)"])
 
-    st.divider()
-    st.markdown("#### Hyperparamètres d'architecture")
+        st.divider()
+        st.markdown("#### Hyperparamètres d'architecture")
 
-    n_layers = st.slider("Nombre de couches cachées", 1, 4, 2)
-    hidden_units: List[int] = []
-    cols = st.columns(n_layers)
-    for i in range(n_layers):
-        default_val = 64 // (2**i) if 64 // (2**i) >= 8 else 8
-        units = cols[i].number_input(
-            f"L{i + 1}", min_value=4, max_value=256, value=default_val, step=4
-        )
-        hidden_units.append(int(units))
+        n_layers = st.slider("Nombre de couches cachées", 1, 4, 2)
+        hidden_units: List[int] = []
+        cols = st.columns(n_layers)
+        for i in range(n_layers):
+            default_val = 64 // (2**i) if 64 // (2**i) >= 8 else 8
+            units = cols[i].number_input(
+                f"L{i + 1}", min_value=4, max_value=256, value=default_val, step=4
+            )
+            hidden_units.append(int(units))
 
-    activation_fn = st.selectbox("Fonction d'activation", ["relu", "tanh", "sigmoid"])
-    learning_rate = st.select_slider(
-        "Taux d'apprentissage (lr)",
-        options=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
-        value=0.001,
-    )
-
-    if engine == "Keras (TensorFlow)":
-        dropout = st.slider("Taux de Dropout", 0.0, 0.5, 0.2, 0.05)
-        batch_norm = st.checkbox("Batch Normalization", value=True)
-    else:
-        dropout = 0.0
-        batch_norm = False
-        st.info(
-            "Le moteur NumPy exécute une descente de gradient matricielle avec Softmax."
+        activation_fn = st.selectbox("Fonction d'activation", ["relu", "tanh", "sigmoid"])
+        learning_rate = st.select_slider(
+            "Taux d'apprentissage (lr)",
+            options=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+            value=0.001,
         )
 
-    epochs = st.slider(
-        "Nombre d'epochs", min_value=10, max_value=300, value=60, step=10
-    )
-    batch_size = st.select_slider(
-        "Taille de batch", options=[16, 32, 64, 128, 256], value=32
-    )
+        if engine == "Keras (TensorFlow)":
+            dropout = st.slider("Taux de Dropout", 0.0, 0.5, 0.2, 0.05)
+            batch_norm = st.checkbox("Batch Normalization", value=True)
+        else:
+            dropout = 0.0
+            batch_norm = False
+            st.info(
+                "Le moteur NumPy exécute une descente de gradient matricielle avec Softmax."
+            )
+
+        epochs = st.slider(
+            "Nombre d'epochs", min_value=10, max_value=300, value=60, step=10
+        )
+        batch_size = st.select_slider(
+            "Taille de batch", options=[16, 32, 64, 128, 256], value=32
+        )
 
 
 # ==============================================================================
-# Main Content
+# Structure principale en onglets
 # ==============================================================================
 
 if df_train is None or df_test is None:
@@ -95,6 +137,7 @@ y_train = df_train["Target"].values.astype(np.int64)
 
 X_test = df_test.drop(columns=["Target"]).values.astype(np.float32)
 y_test = df_test["Target"].values.astype(np.int64)
+
 
 n_features = X_train.shape[1]
 n_classes = len(np.unique(y_train))
@@ -168,6 +211,9 @@ with tab_train:
                 color_continuous_scale="Blues",
                 title=f"Confusion Matrix - Keras ({activation_fn})",
             )
+            report_dict = classification_report(
+                y_test, y_pred, target_names=class_labels, output_dict=True
+            )
 
             run_params = {
                 "engine": "keras",
@@ -182,19 +228,22 @@ with tab_train:
             metrics_summary = {
                 "test_loss": float(test_loss),
                 "test_accuracy": float(test_acc),
+                "best_epoch": int(pd.DataFrame(history.history)["val_loss"].idxmin()) + 1
             }
 
-            # log_keras_training(
-            #    run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
-            #    params=run_params,
-            #    model=model,
-            #    history=history.history,
-            #    metrics_test=metrics_summary,
-            #    fig_cm=fig_cm,
-            #)
+            log_keras_training(
+                run_name=f"keras_mlp_{activation_fn}_lr{learning_rate}",
+                params=run_params,
+                model=model,
+                history=history.history,
+                metrics_test=metrics_summary,
+                fig_cm=fig_cm,
+                report_dict=report_dict,
+            )
 
             st.session_state["trained_model"] = model
             st.session_state["history_df"] = pd.DataFrame(history.history)
+            st.session_state["history_obj"] = pd.DataFrame(history.history)
             st.session_state["y_pred"] = y_pred
             st.session_state["engine"] = "keras"
             st.success("Entraînement Keras terminé et enregistré dans MLflow.")
@@ -278,7 +327,7 @@ with tab_train:
                         ),
                         height=400,
                     )
-                    chart_spot.plotly_chart(fig, use_container_width=True)
+                    chart_spot.plotly_chart(fig, width='stretch')
 
             test_loss, test_acc = np_model.evaluate(X_test, y_test_oh)
             y_pred = np_model.predict(X_test)
@@ -292,6 +341,9 @@ with tab_train:
                 y=class_labels,
                 color_continuous_scale="Blues",
                 title=f"Confusion Matrix - NumPy ({activation_fn})",
+            )
+            report_dict = classification_report(
+                y_test, y_pred, target_names=class_labels, output_dict=True
             )
 
             run_params = {
@@ -307,13 +359,15 @@ with tab_train:
                 "test_accuracy": float(test_acc),
             }
 
-#           log_numpy_training(
-#               run_name=f"numpy_mlp_{activation_fn}_lr{learning_rate}",
-#               params=run_params,
-#               history=records,
-#               metrics_test=metrics_summary,
-#               fig_cm=fig_cm,
-#           )
+            log_numpy_training(
+                run_name=f"numpy_mlp_{activation_fn}_lr{learning_rate}",
+                model=np_model,
+                params=run_params,
+                history=records,
+                metrics_test=metrics_summary,
+                fig_cm=fig_cm,
+                report_dict=report_dict,
+            )
 
             st.session_state["trained_model"] = np_model
             st.session_state["history_df"] = pd.DataFrame(records)
@@ -358,7 +412,7 @@ with tab_train:
             ),
             height=400,
         )
-        chart_spot.plotly_chart(fig, use_container_width=True)
+        chart_spot.plotly_chart(fig, width='stretch')
 
 # ------------------------------------------------------------------------------
 # 2 · Évaluation
@@ -380,7 +434,7 @@ with tab_eval:
                 y_test, y_pred, target_names=class_labels, output_dict=True
             )
             df_report = pd.DataFrame(report_dict).transpose().round(3)
-            st.dataframe(df_report, use_container_width=True)
+            st.dataframe(df_report, width='stretch')
 
         with col_mat:
             st.markdown("##### Matrice de confusion")
@@ -394,17 +448,15 @@ with tab_eval:
                 labels=dict(x="Prédit", y="Réel", color="Nombre"),
             )
             fig_cm.update_layout(height=380, margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig_cm, use_container_width=True)
+            st.plotly_chart(fig_cm, width='stretch')
 
-    if history is not None:
+    if "history_obj" in st.session_state and not st.session_state["history_obj"].empty:
         st.subheader("Courbes d'apprentissage")
 
-        # On crée 3 colonnes : [Marge gauche, Contenu central (80%), Marge droite]
-        # Les proportions [0.1, 0.8, 0.1] laissent 10% de vide à gauche et à droite.
+        df = st.session_state["history_obj"]
         col_center, _ = st.columns([0.9, 0.1])
-
         with col_center:
-            fig = plot_learning_curves(history, "Learning Curve")
+            fig = plot_learning_curves(df, "Learning Curve")
             st.pyplot(fig)
 
 
