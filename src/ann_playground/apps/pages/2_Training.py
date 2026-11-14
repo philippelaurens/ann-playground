@@ -36,11 +36,6 @@ logging.basicConfig(
 )
 
 
-def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Load train and test Parquet matrices from processed data directory."""
-    return load_prepared_datasets()
-
-
 # ---------------------------------------------------------------------------
 # Authentification
 # ---------------------------------------------------------------------------
@@ -75,7 +70,11 @@ st.set_page_config(
 
 st.title("ANN Playground : ANN Lab")
 
-df_train, df_test = cached_load_prepared_datasets()
+try:
+    df_train, df_test = load_prepared_datasets()
+except FileNotFoundError as e:
+    st.error(e)
+    st.stop()
 
 with st.sidebar:
     with st.empty().container():    
