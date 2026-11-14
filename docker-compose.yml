@@ -65,7 +65,6 @@ services:
       context: .
       dockerfile: Dockerfile  # Votre Dockerfile existant à la racine
     image: ann-playground:${APP_VERSION:-latest}
-    container_name: ann-playground-api
     ports:
       - "${API_PORT:-8000}:${API_PORT:-8000}"
     volumes:
