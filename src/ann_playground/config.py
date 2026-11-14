@@ -19,11 +19,16 @@ DATA: Final[Path] = RAW_DATA_DIR / "data.csv"
 
 MLFLOW_DATA_DIR: Final[Path] = BASE_DIR / "mlflow-data"
 MLFLOW_DB_PATH: Final[Path] = MLFLOW_DATA_DIR / "mlflow.db"
-MLFLOW_TRACKING_URI: Final[str] = os.getenv(
-    "MLFLOW_TRACKING_URI",
-    # f"sqlite:///{MLFLOW_DB_PATH.resolve()}",
-    "http://mlflow:5000",
-)
-os.environ["MLFLOW_TRACKING_USERNAME"] = os.getenv("MLFLOW_TRACKING_USERNAME", "")
-os.environ["MLFLOW_TRACKING_PASSWORD"] = os.getenv("MLFLOW_TRACKING_PASSWORD", "")
+
+# Définition des valeurs par défaut centralisées
+# Récupération propre de l'URI (le fallback est géré directement dans os.getenv)
+DEFAULT_MLFLOW_URI: Final[str] = "http://mlflow:5000"
+MLFLOW_TRACKING_URI: Final[str] = os.getenv("MLFLOW_TRACKING_URI", DEFAULT_MLFLOW_URI)
+
+# Synchronisation propre des identifiants (uniquement si présents ou initialisés)
+MLFLOW_TRACKING_USERNAME: Final[str] = os.getenv("MLFLOW_TRACKING_USERNAME", "")
+MLFLOW_TRACKING_PASSWORD: Final[str] = os.getenv("MLFLOW_TRACKING_PASSWORD", "")
+os.environ["MLFLOW_TRACKING_USERNAME"] = MLFLOW_TRACKING_USERNAME
+os.environ["MLFLOW_TRACKING_PASSWORD"] = MLFLOW_TRACKING_PASSWORD
+
 EXPERIMENT_NAME: str = "ANN_Playground"

@@ -41,7 +41,8 @@ COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml ./
 COPY src/ ./src/
 
-EXPOSE 8501 5000
+# Optionnel : documente les ports par défaut
+EXPOSE 8501 5000 8000
 
-# Default command launches the Streamlit entry point
-CMD ["streamlit", "run", "src/ann_playground/apps/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Commande utilisant la variable d'environnement STREAMLIT_PORT (avec 8501 par défaut)
+CMD ["sh", "-c", "streamlit run src/ann_playground/apps/app.py --server.port=${STREAMLIT_PORT:-8501} --server.address=0.0.0.0"]

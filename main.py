@@ -87,8 +87,9 @@ def load_run_artifacts(run_id: str):
     if run_id in model_cache:
         return model_cache[run_id], preprocessing_cache.get(run_id)
 
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-    mlflow.set_tracking_uri(tracking_uri)
+    # Superflu.
+    # tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    # mlflow.set_tracking_uri(tracking_uri)
 
     logger.info("----- Inside load_run_artifacts -----")
 

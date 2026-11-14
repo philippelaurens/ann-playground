@@ -10,7 +10,7 @@ from mlflow.entities import Experiment
 from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
-from ann_playground.config import MLFLOW_TRACKING_URI
+from ann_playground.config import MLFLOW_TRACKING_URI, DEFAULT_MLFLOW_URI
 from ann_playground.model.numpy_mlp_wrapper import NumpyMLPWrapper
 
 
@@ -120,8 +120,8 @@ def log_keras_training(
     report_dict: Dict[str, Any],
     output_dir: Path | str = "data/processed_data", # Ajout pour pointer vers les artefacts locaux
 ) -> None:
-    if not mlflow.get_tracking_uri():
-        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", DEFAULT_MLFLOW_URI)
+    mlflow.set_tracking_uri(tracking_uri)
 
     out_path = Path(output_dir)
     config_path = out_path / "pipeline_config.json"
@@ -215,8 +215,8 @@ def log_numpy_training(
     report_dict: Dict[str, Any],
     output_dir: str = "data/processed_data",
 ) -> None:
-    if not mlflow.get_tracking_uri():
-        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", DEFAULT_MLFLOW_URI)
+    mlflow.set_tracking_uri(tracking_uri)
 
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
