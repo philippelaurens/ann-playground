@@ -202,6 +202,7 @@ def build_structured_runs_table(max_results=None):
             "run_id": run_id,
             "run_name": run_name,
             "activation": activation,
+            "hidden_layers": hidden_layers,
             "layers": num_layers,
             "learning_rate": float(lr) if lr is not None and pd.notna(lr) else None,
             "dropout_rate": float(dropout) if dropout is not None and pd.notna(dropout) else None,

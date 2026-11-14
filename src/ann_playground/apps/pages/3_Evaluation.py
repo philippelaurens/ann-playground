@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import re
+import ast
 import numpy as np
 import pandas as pd
 import logging
@@ -28,6 +29,10 @@ logging.basicConfig(
     force=True
 )
 logger.info("Appel")
+
+
+def _to_list(x):
+    return ast.literal_eval(x) if isinstance(x, str) else list(x)
 
 # ---------------------------------------------------------------------------
 # Authentification
@@ -116,19 +121,20 @@ with st.sidebar:
 # Structure principale en onglets
 # ==============================================================================
 
-tab_diag, tab_autre = st.tabs(
+tab_diag, tab_overfitting, tab_acc_vs_loss, tab_hyperparams= st.tabs(
     [
         "1 · Configuration du Run MLflow",
-        "2 · Inference",
+        "2 · Analyse du sur-apprentissage",
+        "3 - Compromis accuracy / loss",
+        "4 - Effet moyen d'un hyperparamètre"                                                             
     ]
 )
-
-
- 
 
 # ------------------------------------------------------------------------------
 # 1 · Diagnostic structurel
 # ------------------------------------------------------------------------------
+
+df_display = None
 
 with tab_diag:
     if show_matching and matching_runs:
@@ -153,7 +159,7 @@ with tab_diag:
         )
 
         # Transformation de la liste de dictionnaires en DataFrame pandas pour un affichage propre
-        df_display = pd.DataFrame(matching_runs)[["activation", "layers", "val_accuracy", "val_loss", "learning_rate", "dropout_rate", "batch_norm", "epochs", "pca"]]
+        df_display = pd.DataFrame(matching_runs)[["activation", "hidden_layers", "val_accuracy", "val_loss", "learning_rate", "dropout_rate", "batch_norm", "epochs", "pca"]]
         df_display.columns = ["Activation", "Layers", "Val Accuracy", "Val Loss", "Learning Rate", "Dropout Rate", "Batch Norm", "Epochs", "PCA"]
 
         # Affichage sous forme de tableau interactif
@@ -279,11 +285,118 @@ with tab_diag:
 # 2 · Distributions & Relations
 # ------------------------------------------------------------------------------
 
-with tab_autre:
-    st.warning("Aucun runs MLflow.")
+if show_matching and matching_runs:
+
+    if df_display is not None and not df_display.empty:
+        df_viz = df_display.copy()
+
+        layers_list = df_viz["Layers"].apply(_to_list)
+        df_viz["Layers_str"] = layers_list.astype(str)
+        df_viz["Profondeur"] = layers_list.apply(len)
+        df_viz["Largeur 1re couche"] = layers_list.apply(lambda l: l[0])
+
+        # "20 (best: 15)" -> total=20, best=15
+        ep = df_viz["Epochs"].astype(str).str.extract(r"(\d+)\s*\(best:\s*(\d+)\)").astype(float)
+        df_viz["Epochs total"] = ep[0]
+        df_viz["Best epoch"] = ep[1]
+        df_viz["Ratio best/total"] = df_viz["Best epoch"] / df_viz["Epochs total"]
+
+        df_viz["PCA actif"] = df_viz["PCA"].astype(str).str.startswith("oui")
+        df_viz["Run"] = (
+            df_viz["Activation"] + " " + df_viz["Layers_str"]
+            + " | do=" + df_viz["Dropout Rate"].astype(str)
+            + " | #" + df_viz.index.astype(str)
+        )
+    elif show_matching and not matching_runs:
+        st.warning("Aucun run ne correspond à cette combinaison exacte.")
+    else:
+        st.info("👈 Utilisez les filtres dans la barre latérale et cliquez sur **'Afficher les runs correspondants'** pour voir les détails au centre.")
 
 
-# ------------------------------------------------------------------------------
-# 3 · Colinéarité & Sélection
-# ------------------------------------------------------------------------------
-    
+with tab_overfitting:
+
+    if df_display is not None and not df_display.empty:
+
+        st.subheader(f"Analyse du sur-apprentissage")
+
+        st.markdown(
+            "Ratio proche de 0 : la meilleure epoch arrive très tôt, le reste de "
+                        "l'entraînement dégrade la validation (sur-apprentissage ou early stopping trop patient)."
+        )
+
+        d = df_viz.dropna(subset=["Ratio best/total"]).sort_values("Ratio best/total")
+        fig = px.bar(
+            d, x="Ratio best/total", y="Run", orientation="h",
+            color="Val Loss", color_continuous_scale="RdYlGn_r",
+            hover_data=["Best epoch", "Epochs total", "Val Accuracy"],
+        )
+        fig.update_layout(height=max(350, 28 * len(d)), yaxis_title=None)
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("👈 Utilisez les filtres dans la barre latérale et cliquez sur **'Afficher les runs correspondants'** pour voir les détails au centre.")
+
+
+with tab_acc_vs_loss:
+
+    if df_display is not None and not df_display.empty:
+
+        st.subheader(f"Compromis accuracy / loss")
+
+        st.markdown(f"**Les meilleurs runs sont en haut à gauche (accuracy haute, loss basse).**")
+        
+        fig = px.scatter(
+            df_viz, x="Val Loss", y="Val Accuracy",
+            color="Dropout Rate", symbol="Activation", size="Epochs total",
+            hover_name="Run",
+            hover_data=["Layers_str", "Best epoch", "PCA"],
+            color_continuous_scale="Viridis",
+        )
+        fig.update_layout(
+            coloraxis_colorbar=dict(
+                title="Dropout",
+                y=0.35,          # position verticale (0 = bas, 1 = haut)
+                len=0.5,         # hauteur de la barre
+                yanchor="middle",
+            ),
+            legend=dict(
+                y=1, yanchor="top",
+            ),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("👈 Utilisez les filtres dans la barre latérale et cliquez sur **'Afficher les runs correspondants'** pour voir les détails au centre.")
+
+
+with tab_hyperparams:
+
+    if df_display is not None and not df_display.empty:
+
+        st.subheader(f"Effet moyen d'un hyperparamètre")
+
+        st.markdown(f"**Avec n petit, une différence inférieure à l'écart-type n'est pas concluante.**")
+        
+        factor = st.selectbox(
+            "Paramètre à analyser",
+            ["Activation", "Layers_str", "Dropout Rate", "PCA actif", "Epochs total"],
+        )
+        metric = st.radio("Métrique", ["Val Accuracy", "Val Loss"], horizontal=True)
+        agg = (
+            df_viz.groupby(factor)[metric]
+            .agg(["mean", "std", "count"]).reset_index()
+        )
+        agg["std"] = agg["std"].fillna(0)
+        fig = px.bar(
+            agg, x=factor, y="mean", error_y="std", text="count",
+            labels={"mean": f"{metric} (moyenne ± écart-type)"},
+        )
+        fig.update_traces(texttemplate="n=%{text}", textposition="outside")
+        fig.update_xaxes(type="category")
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("👈 Utilisez les filtres dans la barre latérale et cliquez sur **'Afficher les runs correspondants'** pour voir les détails au centre.")
+
+
+
