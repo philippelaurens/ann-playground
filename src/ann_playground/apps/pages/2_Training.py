@@ -1,5 +1,5 @@
+import os
 from typing import Dict, List, Tuple
-
 import numpy as np
 import pandas as pd
 import logging
@@ -28,13 +28,14 @@ from ann_playground.services.mlflow_utils import (
     fetch_available_runs
 )
 
-logger = logging.getLogger(__name__)
+module_name = os.path.basename(__file__)
+logger = logging.getLogger(module_name)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     force=True
 )
-
+logger.info("Appel")
 
 # ---------------------------------------------------------------------------
 # Authentification
