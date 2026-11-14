@@ -1,5 +1,5 @@
+import os
 from typing import Dict, List, Tuple
-
 import numpy as np
 import pandas as pd
 import logging
@@ -28,18 +28,14 @@ from ann_playground.services.mlflow_utils import (
     fetch_available_runs
 )
 
-logger = logging.getLogger(__name__)
+module_name = os.path.basename(__file__)
+logger = logging.getLogger(module_name)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     force=True
 )
-
-
-def cached_load_prepared_datasets() -> Tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Load train and test Parquet matrices from processed data directory."""
-    return load_prepared_datasets()
-
+logger.info("Appel")
 
 # ---------------------------------------------------------------------------
 # Authentification
@@ -75,7 +71,11 @@ st.set_page_config(
 
 st.title("ANN Playground : ANN Lab")
 
-df_train, df_test = cached_load_prepared_datasets()
+try:
+    df_train, df_test = load_prepared_datasets()
+except FileNotFoundError as e:
+    st.error(e)
+    st.stop()
 
 with st.sidebar:
     with st.empty().container():    
