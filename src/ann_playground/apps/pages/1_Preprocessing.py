@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import time
@@ -35,12 +36,14 @@ from ann_playground.data.data_visualisation import (
     scree_plot_with_ideal_components,
 )
 
-logger = logging.getLogger(__name__)
+module_name = os.path.basename(__file__)
+logger = logging.getLogger(module_name)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     force=True
 )
+logger.info("Appel")
 
 # ---------------------------------------------------------------------------
 # Authentification

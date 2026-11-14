@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import requests
@@ -5,7 +6,6 @@ import logging
 import mlflow
 import json
 import re
-import os
 import streamlit.components.v1 as components
 
 from ann_playground.config import DATA, CLEAN_DATA_DIR, PROCESSED_DATA_DIR, EXPERIMENT_NAME
@@ -18,12 +18,14 @@ from ann_playground.services.mlflow_utils import (
     load_label_encoder
 )
 
-logger = logging.getLogger(__name__)
+module_name = os.path.basename(__file__)
+logger = logging.getLogger(module_name)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     force=True
 )
+logger.info("Appel")
 
 # ---------------------------------------------------------------------------
 # Authentification
