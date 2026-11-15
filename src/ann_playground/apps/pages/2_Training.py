@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
+from keras.callbacks import EarlyStopping
 
 from ann_playground.config import PROCESSED_DATA_DIR, EXPERIMENT_NAME
 from ann_playground.model.keras_mlp import StreamlitEpochCallback, build_keras_mlp
@@ -189,13 +190,19 @@ with tab_train:
                 progress_bar=progress_bar,
             )
 
+            early_stopping = EarlyStopping(
+                monitor='val_loss',
+                patience=3,          # Nombre d'époques sans amélioration avant d'arrêter
+                restore_best_weights=True # Restaure les poids du meilleur modèle
+            )
+
             history = model.fit(
                 X_train,
                 y_train,
                 validation_data=(X_val, y_val),
                 epochs=epochs,
                 batch_size=batch_size,
-                callbacks=[cb],
+                callbacks=[cb, early_stopping],
                 verbose=0,
             )
 
